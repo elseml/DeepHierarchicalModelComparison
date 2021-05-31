@@ -14,30 +14,33 @@ test_data_bf_true_indices <- np$load("test_data_bf_true_indices.npy")
 
 # Input checks
 dim(test_data_bf) # Check input dimensionality
-print(test_data_bf[1,1,,]) # Show data of the first person in the first dataset
+#print(test_data_bf[1,1,,]) # Show data of the first person in the first dataset
 
 # (For the beginning: start with only 1 dataset)
-test_data_bf_single <- test_data_bf[1,,,]
+test_data_bf_single <- test_data_bf[2,,,]
 
 ### Specify Stan models
 
-# FOR TESTING: model0 with target += normal_lpdf(theta[L] | 10, sqrt(tau2)); -> 10 instead of 0 to differentiate models more 
+# FOR TESTING: model0 with target += normal_lpdf(theta[L] | 10, sqrt(tau2)); -> 10 instead of 0 to make the models more distinguishable
 
 model0 <- 'data {
   int<lower = 1> N;               // Number of observations.
   int<lower = 1> L;               // Number of clusters.
   matrix[L, N] y;                 // Matrix of observations.
-  real<lower=0> alpha;            // Higher order variance prior - shape parameter.
-  real<lower=0> beta;             // Higher order variance prior - rate parameter.
-  real<lower=0> sigma2;           // Intra-cluster variance.
+  real<lower=0> alpha_t;          // Higher order variance prior - shape parameter.
+  real<lower=0> beta_t;           // Higher order variance prior - rate parameter.
+  real<lower=0> alpha_s;          // Variance prior - shape parameter.
+  real<lower=0> beta_s;           // Variance prior - rate parameter.
 }
 parameters {
   real<lower=0> tau2; // Group-level variance
   vector[L] theta; // Participant effects
+  real<lower=0> sigma2; // Unit-level variance
 }
 model {
-  target += inv_gamma_lpdf(tau2 | alpha, beta);
-  target += normal_lpdf(theta[L] | 0, sqrt(tau2));
+  target += inv_gamma_lpdf(tau2 | alpha_t, beta_t);
+  target += normal_lpdf(theta | 0, sqrt(tau2));
+  target += inv_gamma_lpdf(sigma2 | alpha_s, beta_s);  
   for (l in 1:L) {
       target += normal_lpdf(y[l] | theta[l], sqrt(sigma2));
   }
@@ -49,19 +52,22 @@ model1 <- 'data {
   matrix[L, N] y;                 // Matrix of observations.
   real mu0;                       // higher order mean prior - mean
   real<lower=0> tau20;            // higher order mean prior - variance
-  real<lower=0> alpha;            // Higher order variance prior - shape parameter.
-  real<lower=0> beta;             // Higher order variance prior - rate parameter.
-  real<lower=0> sigma2;           // Intra-cluster variance.
+  real<lower=0> alpha_t;          // Higher order variance prior - shape parameter.
+  real<lower=0> beta_t;           // Higher order variance prior - rate parameter.
+  real<lower=0> alpha_s;          // Variance prior - shape parameter.
+  real<lower=0> beta_s;           // Variance prior - rate parameter.
 }
 parameters {
   real mu;
   real<lower=0> tau2; // Group-level variance
   vector[L] theta; // Participant effects
+  real<lower=0> sigma2; // Unit-level variance
 }
 model {
   target += normal_lpdf(mu | mu0, sqrt(tau20));
-  target += inv_gamma_lpdf(tau2 | alpha, beta);
-  target += normal_lpdf(theta[L] | mu, sqrt(tau2));
+  target += inv_gamma_lpdf(tau2 | alpha_t, beta_t);
+  target += normal_lpdf(theta | mu, sqrt(tau2));
+  target += inv_gamma_lpdf(sigma2 | alpha_s, beta_s);  
   for (l in 1:L) {
       target += normal_lpdf(y[l] | theta[l], sqrt(sigma2));
   }
@@ -78,9 +84,10 @@ data_and_priors0 <- list(
   N = dim(test_data_bf)[3],  # Number of observations.
   L = dim(test_data_bf)[2],  # Number of clusters.
   y = test_data_bf_single,   # Matrix of observations.
-  alpha = 1,     
-  beta = 1,
-  sigma2 = 1 
+  alpha_t = 1,     
+  beta_t = 1,
+  alpha_s = 1,     
+  beta_s = 1
 )
 
 data_and_priors1 <- list(
@@ -89,9 +96,10 @@ data_and_priors1 <- list(
   y = test_data_bf_single,   # Matrix of observations.
   mu0 = 0,                   # Difference to model0! 
   tau20 = 1,          
-  alpha = 1,     
-  beta = 1,
-  sigma2 = 1 
+  alpha_t = 1,     
+  beta_t = 1,
+  alpha_s = 1,     
+  beta_s = 1
 )
 
 # Fit
@@ -103,19 +111,19 @@ stanfit_model1 <- sampling(model1, data = data_and_priors1,
 
 # Check chain mixing through trace plots
 # (only for first 5 thetas to keep plotting time reasonable)
-stanfit_model0 %>%
-  mcmc_trace(
-    pars = c("tau2", str_c("theta[", 1:5, "]")),
-    n_warmup = 1000,
-    facet_args = list(nrow = 5, labeller = label_parsed)
-  )
-
-stanfit_model1 %>%
-  mcmc_trace(
-    pars = c("tau2", str_c("theta[", 1:5, "]")),
-    n_warmup = 1000,
-    facet_args = list(nrow = 5, labeller = label_parsed)
-  )
+# stanfit_model0 %>%
+#   mcmc_trace(
+#     pars = c("tau2", str_c("theta[", 1:5, "]")),
+#     n_warmup = 1000,
+#     facet_args = list(nrow = 5, labeller = label_parsed)
+#   )
+# 
+# stanfit_model1 %>%
+#   mcmc_trace(
+#     pars = c("tau2", str_c("theta[", 1:5, "]")),
+#     n_warmup = 1000,
+#     facet_args = list(nrow = 5, labeller = label_parsed)
+#   )
 
 ### Bridge Sampling
 # Compute the (Log) Marginal Likelihoods
@@ -140,10 +148,11 @@ print(BF10)
 post1 <- post_prob(m0.bridge, m1.bridge)
 print(post1)
 
+### Evaluation of true model recovery
 # Compute MAE
-mae_metric <- mean(abs(test_data_bf_true_indices[1]-post1[2])) # change [1] to [i] when using multiple datasets 
+mae_metric <- mean(abs(test_data_bf_true_indices[1]-post1[2])) # [1] as we are only using the first dataset so far
 print(mae_metric)
 
 # Compute Accuracy
-accuracy_metric <- mean(test_data_bf_true_indices[1] == round(post1[2])) # change [1] to [i] when using multiple datasets
+accuracy_metric <- mean(test_data_bf_true_indices[1] == round(post1[2])) # [1] as we are only using the first dataset so far
 print(accuracy_metric)
