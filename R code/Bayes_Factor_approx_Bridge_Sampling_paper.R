@@ -1,6 +1,6 @@
 library(tidyverse)
 library(rstan)
-library(bayesplot)
+#library(bayesplot)
 library(bridgesampling)
 library(reticulate)
 np <- import("numpy")
@@ -40,7 +40,7 @@ save_parameter_estimates <- function(row, stanfits, parameter_estimates){
 
 
 ### Import test datasets
-test_data_bf <- np$load("data/BF_approximation_comparison/test_data_bf.npy")
+test_data_bf <- np$load("data/BF_approximation_comparison/test_data_bf.npy", allow_pickle = TRUE)[[1]][[1]]
 test_data_bf_true_indices <- np$load("data/BF_approximation_comparison/test_data_bf_true_indices.npy")
 
 
@@ -138,8 +138,8 @@ print(compile_time)
 
 ### For Loop through datasets
 
-for (i in 1:dim(test_data_bf)[1]){    
-#for (i in 1:2){                       # FOR TESTING: 1:x
+#for (i in 1:dim(test_data_bf)[1]){    
+for (i in 1:2){                       # FOR TESTING: 1:x
   
   # select dataset
   test_data_bf_single <- test_data_bf[i,,,]
