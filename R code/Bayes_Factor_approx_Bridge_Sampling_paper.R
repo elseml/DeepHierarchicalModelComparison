@@ -80,10 +80,8 @@ model0 <- 'data {
   int<lower = 1> N;               // Number of observations.
   int<lower = 1> L;               // Number of clusters.
   matrix[L, N] y;                 // Matrix of observations.
-  real<lower=0> alpha_t;          // Higher order variance prior - shape parameter.
-  real<lower=0> beta_t;           // Higher order variance prior - rate parameter.
-  real<lower=0> alpha_s;          // Variance prior - shape parameter.
-  real<lower=0> beta_s;           // Variance prior - rate parameter.
+  real<lower=0> sigma_t;          // Higher order variance prior
+  real<lower=0> sigma_s;          // Variance prior
   }
   parameters {
     real<lower=0> tau2; // Group-level variance
@@ -91,24 +89,22 @@ model0 <- 'data {
     real<lower=0> sigma2; // Unit-level variance
   }
   model {
-    target += inv_gamma_lpdf(tau2 | alpha_t, beta_t);
+    target += normal_lpdf(tau2 | 0, sigma_t) - normal_lcdf(0 | 0, sigma_t); // half-normal
     target += normal_lpdf(theta | 0, sqrt(tau2));
-    target += inv_gamma_lpdf(sigma2 | alpha_s, beta_s);  
+    target += normal_lpdf(sigma2 | 0, sigma_s) - normal_lcdf(0 | 0, sigma_s); // half-normal
     for (l in 1:L) {
         target += normal_lpdf(y[l] | theta[l], sqrt(sigma2));
     }
   }
   '
 model1 <- 'data {
-    int<lower = 1> N;               // Number of observations.
-    int<lower = 1> L;               // Number of clusters.
-    matrix[L, N] y;                 // Matrix of observations.
-    real mu0;                       // higher order mean prior - mean
-    real<lower=0> tau20;            // higher order mean prior - variance
-    real<lower=0> alpha_t;          // Higher order variance prior - shape parameter.
-    real<lower=0> beta_t;           // Higher order variance prior - rate parameter.
-    real<lower=0> alpha_s;          // Variance prior - shape parameter.
-    real<lower=0> beta_s;           // Variance prior - rate parameter.
+  int<lower = 1> N;               // Number of observations.
+  int<lower = 1> L;               // Number of clusters.
+  matrix[L, N] y;                 // Matrix of observations.
+  real mu0;                       // higher order mean prior - mean
+  real<lower=0> tau20;            // higher order mean prior - variance
+  real<lower=0> sigma_t;          // Higher order variance prior
+  real<lower=0> sigma_s;          // Variance prior
   }
   parameters {
     real mu;
@@ -118,9 +114,9 @@ model1 <- 'data {
   }
   model {
     target += normal_lpdf(mu | mu0, sqrt(tau20));
-    target += inv_gamma_lpdf(tau2 | alpha_t, beta_t);
+    target += normal_lpdf(tau2 | 0, sigma_t) - normal_lcdf(0 | 0, sigma_t); // half-normal
     target += normal_lpdf(theta | mu, sqrt(tau2));
-    target += inv_gamma_lpdf(sigma2 | alpha_s, beta_s);  
+    target += normal_lpdf(sigma2 | 0, sigma_s) - normal_lcdf(0 | 0, sigma_s); // half-normal  
     for (l in 1:L) {
         target += normal_lpdf(y[l] | theta[l], sqrt(sigma2));
     }
@@ -138,8 +134,8 @@ print(compile_time)
 
 ### For Loop through datasets
 
-#for (i in 1:dim(test_data_bf)[1]){    
-for (i in 1:2){                       # FOR TESTING: 1:x
+for (i in 1:dim(test_data_bf)[1]){    
+#for (i in 1:2){                       # FOR TESTING: 1:x
   
   # select dataset
   test_data_bf_single <- test_data_bf[i,,,]
@@ -155,10 +151,8 @@ for (i in 1:2){                       # FOR TESTING: 1:x
     N = dim(test_data_bf_single)[2],  # Number of observations.
     L = dim(test_data_bf_single)[1],  # Number of clusters.
     y = test_data_bf_single,          # Matrix of observations.
-    alpha_t = 1,     
-    beta_t = 1,
-    alpha_s = 1,     
-    beta_s = 1
+    sigma_t = 1,     
+    sigma_s = 1
   )
   
   data_and_priors1 <- list(
@@ -167,10 +161,8 @@ for (i in 1:2){                       # FOR TESTING: 1:x
     y = test_data_bf_single,          # Matrix of observations.
     mu0 = 0,                          # Difference to model0! 
     tau20 = 1,          
-    alpha_t = 1,     
-    beta_t = 1,
-    alpha_s = 1,     
-    beta_s = 1
+    sigma_t = 1,     
+    sigma_s = 1
   )
 
   # Fit
