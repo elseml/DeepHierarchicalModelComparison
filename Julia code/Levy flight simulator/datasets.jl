@@ -24,15 +24,38 @@ end
 
 
 "Generates a batch of datasets simulated from a given model."
-function generate_levy_batch(model::Int64, batch_size::Int64, n_clusters::Int64, n_trials::Int64)::Array{Float64, 4}
+function generate_levy_batch(model::Int64, batch_size::Int64, n_clusters::Int64, n_trials::Int64)::Tuple{Vector{Int64}, Array{Float64, 4}}
 
     data = fill(0.0, (batch_size, n_clusters, n_trials, 3))
-
-    base_model_index = model
+    index_list = fill(model, batch_size)
 
     Threads.@threads for b in 1:batch_size
-        data[b, :, :, :] = generate_levy_dataset_by_model(base_model_index, n_clusters)
+        data[b, :, :, :] = generate_levy_dataset_by_model(model, n_clusters)
     end
 
-    return data
+    return index_list, data
 end
+
+
+# half-finished drafting for a joint function that returns a single datasets from all models. 
+# Seperate approach seems better right now in order to split long computation times into smaller parts.
+
+#"Generates a batch of datasets simulated from all models."
+#function generate_levy_batch_all_models(batch_size::Int64, n_clusters::Int64, n_trials::Int64)::Array{Float64, 4}
+#
+#    if batch_size%4 != 0
+#        throw(ArgumentError("batch_size needs to be dividable by 4 without remainder."))
+#    end
+#
+#    data = fill(0.0, (batch_size, n_clusters, n_trials, 3))
+#
+#    datasets_per_model = Int(batch_size/4)
+#    base_model_index = repeat([1,2,3,4], inner=Int(datasets_per_model))
+#
+#    Threads.@threads for m in 1:4
+#        Threads.@threads for d in 1:datasets_per_model
+#            data[d, :, :, :] = generate_levy_dataset_by_model(base_model_index, n_clusters)
+#    end
+
+#    return data
+#end
