@@ -1,7 +1,6 @@
 "Generates reaction time datasets according to the four models in Wieschen, Voss and Radev (2020)."
-function generate_levy_dataset_by_model(model::Int, n_clusters::Int64)::Array{Float64, 3}
+function generate_levy_dataset_by_model(model::Int, n_clusters::Int64, n_trials::Int64)::Array{Float64, 3}
 
-    n_trials = 900
     data = fill(0.0, (n_clusters, n_trials, 3))
     hyperpriors = generate_levy_hyperpriors()
 
@@ -16,7 +15,7 @@ function generate_levy_dataset_by_model(model::Int, n_clusters::Int64)::Array{Fl
             sz = sv = st = 0.0 
         end
 
-        data[k, :, :] = generate_levy_conditions(a_l, zr_l, v0_l, v1_l, t0_l, alpha_l, sz, sv, st)
+        data[k, :, :] = generate_levy_conditions(n_trials, a_l, zr_l, v0_l, v1_l, t0_l, alpha_l, sz, sv, st)
     end
 
     return data
@@ -30,7 +29,7 @@ function generate_levy_batch(model::Int64, batch_size::Int64, n_clusters::Int64,
     index_list = fill(model, batch_size)
 
     Threads.@threads for b in 1:batch_size
-        data[b, :, :, :] = generate_levy_dataset_by_model(model, n_clusters)
+        data[b, :, :, :] = generate_levy_dataset_by_model(model, n_clusters, n_trials)
     end
 
     return index_list, data

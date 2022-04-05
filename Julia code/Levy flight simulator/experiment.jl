@@ -23,13 +23,12 @@ end
 
 
 "Generates reaction times of a participant in two conditions (color discrimination & lexical decision)."
-function generate_levy_conditions(a_l::Float64, zr_l::Float64, v0_l::Float64, v1_l::Float64, t0_l::Float64, 
+function generate_levy_conditions(n_trials::Int64, a_l::Float64, zr_l::Float64, v0_l::Float64, v1_l::Float64, t0_l::Float64, 
                                     alpha_l::Float64, sz::Float64, sv::Float64, st::Float64)::Array{Float64, 2}
 
     # Note: This distinction is not really necessary right now as no structural differences are assumed between the tasks.
-
-    color_trials = 500 # 5 blocks a 100 trials
-    lexical_trials = 400 # 4 blocks a 100 trials
+    color_trials = trunc(Int, n_trials*(5/9)) # Wieschen et al. (2020): 5 blocks a 100 trials
+    lexical_trials = trunc(Int, n_trials*(1-5/9)) # Wieschen et al. (2020): 4 blocks a 100 trials
 
     data_c = fill(0.0, (color_trials, 3))
     data_l = fill(0.0, (lexical_trials, 3))
