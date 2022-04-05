@@ -1,10 +1,12 @@
 .ipynb_checkpoints/
 Python code/.ipynb_checkpoints/
 Python code/archive
+Python code/checkpoints
 Python code/experimental
 Python code/Tensorflow Tutorials
 .Rhistory
 R code/.Rhistory
+data/Levy_flight_application/
 data/Truth_effect_example/
 Julia code/Examples Stefan
 Julia code/Levy flight simulator/Levy flight model implementation.docx
