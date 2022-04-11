@@ -4,7 +4,7 @@ import pandas as pd
 from time import perf_counter
 
 
-# Hacks for BayesFlow compatibility. 
+# Calibration: Hacks for BayesFlow compatibility. 
 
 # fixed data set sizes
 def n_clust_obs_f_f():
@@ -54,7 +54,7 @@ def n_clust_obs_v_v(n_clust_min, n_clust_max, n_obs_min, n_obs_max):
 
 
 
-# Get and transform neural network predictions for bridge sampling comparison.
+# Bridge sampling comparison: data transformations
 
 def get_preds_and_bfs(evidence_net, summary_net, data, training_time_start, training_time_stop, losses):
     """ 
@@ -91,3 +91,50 @@ def get_preds_and_bfs(evidence_net, summary_net, data, training_time_start, trai
     df[["dataset", "true_model", "selected_model"]] = df[["dataset", "true_model", "selected_model"]].astype(int)
     
     return df
+
+
+def log_with_inf_noise_addition(x):
+    """ 
+    Adjusts the model probabilities leading to Inf values by a minimal amount of noise, 
+    recomputes the Bayes factors and then computes the log of the given array. 
+    """
+    
+    noise = 0.000000001
+
+    x_copy = x.copy()
+    for i in range(x.shape[0]):
+        if x.loc[i,'m0_prob'] == 0:
+            print('Dataset with infinite BF: {}'.format(i))
+            x_copy.loc[i,'m0_prob'] = x_copy.loc[i,'m0_prob'] + noise
+            x_copy.loc[i,'m1_prob'] = x_copy.loc[i,'m1_prob'] - noise
+            x_copy.loc[i,'bayes_factor'] = x_copy.loc[i,'m1_prob'] / x_copy.loc[i,'m0_prob']
+    x_copy = np.log(x_copy['bayes_factor'])
+    return x_copy
+
+
+def computation_times(bridge_sampling_results, NN_fixed_results, NN_variable_results):
+    """Calculates the computation times of bridge sampling and the two neural network variants.
+
+    Parameters
+    ----------
+    bridge_sampling_results : pd.DataFrame
+        Bridge sampling approximations
+    NN_fixed_results : pd.DataFrame
+        Neural network (trained on fixed sample sizes) approximations
+    NN_variable_results : pd.DataFrame
+        Neural network (trained on varying sample sizes) approximations
+    """
+
+    # Calculate computation times
+    bridge_time = (bridge_sampling_results['compile_time'] + 
+                        (bridge_sampling_results['stan_time'] + bridge_sampling_results['bridge_time']).cumsum()
+                        )/60
+    NN_fixed_time = (NN_fixed_results['training_time'] + NN_fixed_results['inference_time'].cumsum())/60
+    NN_variable_time = (NN_variable_results['training_time'] + NN_variable_results['inference_time'].cumsum())/60
+
+    # Adjust index to represent datasets
+    bridge_time.index = bridge_time.index+1
+    NN_fixed_time.index = NN_fixed_time.index+1
+    NN_variable_time.index = NN_variable_time.index+1
+
+    return bridge_time, NN_fixed_time, NN_variable_time
