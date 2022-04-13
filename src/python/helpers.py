@@ -1,7 +1,11 @@
+import os
 import numpy as np
 import pandas as pd
-
+import tensorflow as tf
+from scipy.stats import truncnorm
+from tensorflow.keras.utils import to_categorical
 from time import perf_counter
+
 
 
 # Calibration: Hacks for BayesFlow compatibility. 
@@ -138,3 +142,102 @@ def computation_times(bridge_sampling_results, NN_fixed_results, NN_variable_res
     NN_variable_time.index = NN_variable_time.index+1
 
     return bridge_time, NN_fixed_time, NN_variable_time
+
+
+
+# Levy flight application: Load and transform data
+
+
+def load_simulated_rt_data(folder, indices_filename, datasets_filename):
+    """Loads and transforms simulated reaction time data.
+
+    Parameters
+    ----------
+    folder : string
+        Path to the folder containing the files
+    indices_filename : string
+    datasets_filename : string
+    """
+
+    indices = np.load(os.path.join(folder, indices_filename))
+    datasets = np.load(os.path.join(folder, datasets_filename))
+
+    # unpack indices
+    indices = indices[:,0,0,0]-1
+
+    # one-hot encode indices
+    indices = to_categorical(indices, num_classes=4)
+
+    return indices, datasets
+
+
+def load_empirical_rt_data(load_dir):
+    """
+    Reads single subject datasets from a folder and transforms into list of 4D-arrays 
+    which allows for a variable number of observations between participants.
+    Assumes data files have a three-column csv format (Condition, Response, Response Time).
+    ----------
+    
+    Arguments:
+    load_dir : str -- a string indicating the directory from which to load the data
+    --------
+        
+    Returns:
+    X: list of length (n_clusters), containing tf.Tensors of shape (1, 1, n_obs, 3) 
+        -- variable order now (Condition, Response Time, Response)
+    """
+    
+    data_files = os.listdir(load_dir)
+    X = []
+    
+    # Loop through data files and estimate
+    for data_file in data_files:
+        
+        ### Read in and transform data
+        data = pd.read_csv(os.path.join(load_dir, data_file), header=None, sep=' ')
+        data = data[[0,2,1]].values # reorder columns
+        X_file = tf.convert_to_tensor(data, dtype=tf.float32)[np.newaxis][np.newaxis] # get 4D tensor
+        X.append(X_file)
+      
+    return X
+
+
+def mask_inputs(data_sets, missings_mean, missings_sd):
+    """Masks some training inputs with -1 so that training leads to a robust net that can handle missing data
+
+    Parameters
+    ----------
+    data_sets : np.array
+        simulated training data sets
+    missings_mean : float
+        empirical mean of missings per person
+    missings_sd : float
+        empirical sd of missings per person
+
+    Returns
+    -------
+    data_sets : np.array
+        simulated training data sets with masked inputs
+    """
+
+    n_data_sets = data_sets.shape[0]
+    n_persons = data_sets.shape[1]
+    n_trials = data_sets.shape[2]
+    n_variables = data_sets.shape[3]
+
+    # create truncated normal parameterization in accordance with scipy documentation
+    a, b = (0 - missings_mean) / missings_sd, (n_trials - missings_mean) / missings_sd 
+
+    for d in range(n_data_sets):
+        # draw number of masked values per person from truncated normal distribution
+        masks_per_person = truncnorm.rvs(a, b, loc=missings_mean, scale=missings_sd, size=n_persons).round().astype(int)
+        # assign the specific trials to be masked within a person 
+        mask_positions = [np.random.randint(0, n_trials, size=(n_persons, j)) for j in masks_per_person][0]
+        for j in range(n_persons):
+            data_sets[d,j,:,:][mask_positions[j]] = -1
+
+    # assert that the average amount of masks per person matches the location of the truncnormal dist
+    deviation = ((data_sets[:,:,:,:] == -1).sum()/(n_data_sets*n_persons*n_variables)) - missings_mean
+    assert deviation < 1, f"Average amount of masks per person deviates by {deviation} from missings_mean!"
+
+    return data_sets

@@ -52,7 +52,7 @@ def plot_confusion_matrix(m_true, m_pred, model_names, ax, normalize=True,
     ax.set_title('Confusion Matrix')
 
     
-def plot_calibration_curve(m_true, m_pred, n_bins, pub_style, ax):
+def plot_calibration_curve(m_true, m_pred, n_bins, pub_style, ax, title=None, show_ece=False):
     """Helper function to plot calibration curve and ece."""
     
     prob_true, prob_pred = calibration_curve(m_true, m_pred, n_bins=n_bins)
@@ -77,6 +77,13 @@ def plot_calibration_curve(m_true, m_pred, n_bins, pub_style, ax):
     ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
     ax.set_xlabel('Accuracy')
     ax.set_ylabel('Confidence')
+    ax.set_title(title)
+    if show_ece:
+        ax.text(0.1, 0.9,  'ECE = {0:.3f}'.format(cal_err),
+                        horizontalalignment='left',
+                        verticalalignment='center',
+                        transform=ax.transAxes,
+                        size=12)
     sns.despine(ax=ax)
     
     
