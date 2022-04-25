@@ -1,3 +1,4 @@
+from ast import Assert
 import os
 import numpy as np
 import pandas as pd
@@ -202,8 +203,8 @@ def load_empirical_rt_data(load_dir):
     return X
 
 
-def mask_inputs(data_sets, missings_mean, missings_sd):
-    """Masks some training inputs with -1 so that training leads to a robust net that can handle missing data
+def mask_inputs(data_sets, missings_mean, missings_sd, missing_value=-1, missing_rts_equal_mean=True, insert_additional_missings=False):
+    """Masks some training inputs so that training leads to a robust net that can handle missing data
 
     Parameters
     ----------
@@ -213,6 +214,10 @@ def mask_inputs(data_sets, missings_mean, missings_sd):
         empirical mean of missings per person
     missings_sd : float
         empirical sd of missings per person
+    missing_rts_equal_mean : boolean
+        indicates whether missings reaction time data should be imputed with the person mean
+    insert_additional_missings : boolean
+        indicates whether additional missings should be inserted, which results in disabling the faithfulness check
 
     Returns
     -------
@@ -220,10 +225,10 @@ def mask_inputs(data_sets, missings_mean, missings_sd):
         simulated training data sets with masked inputs
     """
 
+    data_sets = data_sets.copy()
     n_data_sets = data_sets.shape[0]
     n_persons = data_sets.shape[1]
     n_trials = data_sets.shape[2]
-    n_variables = data_sets.shape[3]
 
     # create truncated normal parameterization in accordance with scipy documentation
     a, b = (0 - missings_mean) / missings_sd, (n_trials - missings_mean) / missings_sd 
@@ -234,10 +239,67 @@ def mask_inputs(data_sets, missings_mean, missings_sd):
         # assign the specific trials to be masked within a person 
         mask_positions = [np.random.randint(0, n_trials, size=(n_persons, j)) for j in masks_per_person][0]
         for j in range(n_persons):
-            data_sets[d,j,:,:][mask_positions[j]] = -1
+            data_sets[d,j,:,1:3][mask_positions[j]] = missing_value
+            if missing_rts_equal_mean:
+                data_sets[d,j,:,1][mask_positions[j]] = np.mean(data_sets[d,j,:,1])
 
     # assert that the average amount of masks per person matches the location of the truncnormal dist
-    deviation = ((data_sets[:,:,:,:] == -1).sum()/(n_data_sets*n_persons*n_variables)) - missings_mean
-    assert deviation < 1, f"Average amount of masks per person deviates by {deviation} from missings_mean!"
+    if insert_additional_missings == False:
+        deviation = abs((data_sets[:,:,:,:] == missing_value).sum()/(n_data_sets*n_persons*(2-missing_rts_equal_mean)) - missings_mean)
+        assert deviation < 3, f"Average amount of masks per person deviates by {deviation} from missings_mean!"
 
     return data_sets
+
+
+def join_and_fill_missings(color_data, lexical_data, n_trials, missings_value=-1, missing_rts_equal_mean=True):
+    """Joins data from color discrimination and lexical decision task per person and fills missings
+
+    Parameters
+    ----------
+    color_data : tf.Tensor
+    lexical_data : tf.Tensor
+    n_trials : int
+    missings_value : float
+        specifies the value that codes missings
+    missing_rts_equal_mean : boolean
+        specifies whether missing rt should be coded with missings_value or imputed with the participant mean
+
+    Returns
+    -------
+    empirical_data : list of tf.Tensors
+    """
+
+    n_clusters = len(color_data)
+    n_trials_per_cond = int(n_trials/2)
+    empirical_data = []
+
+    for j in range(n_clusters):
+        # Join data
+        joint_data = tf.concat([color_data[j], lexical_data[j]], axis=2).numpy()
+        # Extract information about trial
+        n_trials_obs = joint_data.shape[2]
+        n_missings = n_trials-n_trials_obs
+        n_condition_1 = int(joint_data[0,0,:,0].sum())
+        mean_rt = np.mean(joint_data[0,0,:,1])
+        # replace all missings with missings_value
+        npad = ((0,0), (0,0), (0,n_missings), (0,0))
+        joint_data = np.pad(joint_data, npad, 'constant', constant_values=missings_value)
+        # replace missing condition indices
+        cond_indices = np.array([0] * (n_trials_per_cond-(n_trials_obs-n_condition_1)) + [1] * (n_trials_per_cond-n_condition_1))
+        np.random.shuffle(cond_indices)
+        joint_data[0,0,-(n_missings):,0] = cond_indices
+        # replace missing rts with mean rt
+        if missing_rts_equal_mean:
+            joint_data[0,0,:,1] = np.select([joint_data[0,0,:,1] == missings_value], [mean_rt], joint_data[0,0,:,1])
+        # Append
+        empirical_data.append(joint_data)
+    
+    
+    # Transform to np.array
+    empirical_data = np.reshape(np.asarray(empirical_data), (1,n_clusters,n_trials,3))
+
+    # Assert that the number of coded missings equals the real number of missings
+    deviation = abs(((empirical_data == missings_value).sum()/(n_clusters*(2-missing_rts_equal_mean)))-28.5)
+    assert deviation < 1, 'number of filled and existing missings does not match' 
+
+    return empirical_data
