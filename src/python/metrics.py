@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import log_loss, roc_auc_score
 
 
 
@@ -25,23 +25,34 @@ def performance_metrics(bridge_sampling_results, NN_fixed_results, NN_variable_r
         Table with calculated performance metrics
     """
     
+    accuracy = []
+    roc_auc = [] 
     mae = []
     rmse = []
-    roc_auc = [] 
-    accuracy = []
+    log_score = []
+    bias = []
+
     
     for d in (bridge_sampling_results, NN_fixed_results, NN_variable_results):
-        mae_temp = np.mean(abs(d['true_model']-d['m1_prob']))
-        mae.append(mae_temp)
-        rmse_temp = np.sqrt(((d['true_model']-d['m1_prob'])**2).mean())
-        rmse.append(rmse_temp)
-        roc_auc_temp = roc_auc_score(d['true_model'], d['m1_prob'])
-        roc_auc.append(roc_auc_temp)
         accuracy_temp = (d['true_model'] == d['selected_model']).mean()
         accuracy.append(accuracy_temp)
 
+        roc_auc_temp = roc_auc_score(d['true_model'], d['m1_prob'])
+        roc_auc.append(roc_auc_temp)
+
+        mae_temp = np.mean(abs(d['true_model']-d['m1_prob']))
+        mae.append(mae_temp)
+
+        rmse_temp = np.sqrt(((d['true_model']-d['m1_prob'])**2).mean())
+        rmse.append(rmse_temp)
+
+        log_score_temp = log_loss(d['true_model'], d['m1_prob'])
+        log_score.append(log_score_temp)
+
+        bias_temp = abs(0.5 - d['m1_prob'].mean())
+        bias.append(bias_temp)
     
-    df = pd.DataFrame([mae, rmse, roc_auc, accuracy], index=metrics, 
+    df = pd.DataFrame([accuracy, roc_auc, mae, rmse, log_score, bias], index=metrics, 
                       columns = names).transpose()
     
     return df
@@ -71,7 +82,7 @@ def bootstrapped_metrics(bridge_sampling_results, NN_fixed_results, NN_variable_
     perf_metrics_bootstrapped = []
 
     for b in range(n_bootstrap):
-        b_idx = np.random.choice(np.random.permutation(n_test), size=n_test, replace=True)
+        b_idx = np.random.choice(np.arange(n_test), size=n_test, replace=True)
         perf_metrics = performance_metrics(
                             bridge_sampling_results.iloc[b_idx,:], 
                             NN_fixed_results.iloc[b_idx,:], 
