@@ -7,11 +7,10 @@ import tensorflow as tf
 from tqdm.notebook import tqdm
 import matplotlib.pyplot as plt
 plt.rcParams['figure.facecolor'] = 'w'
+plt.rcParams.update({'mathtext.fontset': 'cm'}) # Enable mathcal for model labels
 import seaborn as sns
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import confusion_matrix, accuracy_score, mean_absolute_error
-
-
 
 # Calibration: Plotting for training with fixed numbers of clusters and observations
 
@@ -29,18 +28,15 @@ def plot_confusion_matrix(m_true, m_pred, model_names, ax, normalize=True,
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
 
     im = ax.imshow(cm, interpolation='nearest', cmap=cmap)
-    ax.figure.colorbar(im, ax=ax, shrink=0.6)
+    ax.figure.colorbar(im, ax=ax, shrink=0.7)
     # We want to show all ticks...
     ax.set(xticks=np.arange(cm.shape[1]),
-           yticks=np.arange(cm.shape[0]),
-           xticklabels=model_names, yticklabels=model_names)
+           yticks=np.arange(cm.shape[0]))
 
+    ax.set_xticklabels(model_names, fontsize=plotting_settings['fontsize_labels'])
+    ax.set_yticklabels(model_names, fontsize=plotting_settings['fontsize_labels'])
     ax.set_xlabel('Predicted model', fontsize=plotting_settings['fontsize_labels'])
-    ax.set_ylabel('True model',fontsize=plotting_settings['fontsize_labels']) 
-
-    # Rotate the tick labels and set their alignment.
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
-             rotation_mode="anchor")
+    ax.set_ylabel('True model', fontsize=plotting_settings['fontsize_labels']) 
 
     # Loop over data dimensions and create text annotations.
     if annotate:
@@ -80,7 +76,7 @@ def plot_calibration_curve(m_true, m_pred, n_bins, pub_style, ax, title=None, sh
     ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
     ax.set_xlabel('Accuracy')
     ax.set_ylabel('Confidence')
-    ax.set_title(title)
+    ax.set_title(title, fontsize=plotting_settings['fontsize_labels'])
     if show_ece:
         ax.text(0.1, 0.9,  'ECE = {0:.3f}'.format(cal_err),
                         horizontalalignment='left',
@@ -454,5 +450,35 @@ def plot_validation_results(true_models, preds, labels, save=False):
         plot_calibration_curve(m_true, m_soft, 10, pub_style=True, ax=ax_1[pos1[m], pos2[m]],
                              title=labels[m], show_ece=True)
     
-    if save == True:
+    if save:
         fig.savefig('levy_validation.png', dpi=300, bbox_inches='tight')
+
+
+# Lévy flight application: Visualize PMPs
+
+def plot_model_posteriors(dirichlet_samples, labels, save=False):
+
+    # Prepare dirichlet samples
+    dirichlet_samples = np.squeeze(dirichlet_samples)
+
+    # Plot
+    fig, ax = plt.subplots(figsize=plotting_settings['figsize'])
+
+    violin_plot = ax.violinplot(dirichlet_samples, showmedians=True)
+    colors = plotting_settings['colors_discrete']
+
+    for c, vp in zip(colors, violin_plot['bodies']):
+        vp.set_facecolor(c)
+        vp.set_edgecolor('black')
+        vp.set_alpha(plotting_settings['alpha'])
+
+    # Make all the violin statistics marks black:
+    for partname in ['cbars','cmins','cmaxes','cmedians']:
+        violin_plot[partname].set_edgecolor('black')
+
+    ax.set_xticks([1, 2, 3, 4])
+    ax.set_xticklabels(labels, fontsize=plotting_settings['fontsize_labels'])
+    ax.set_ylabel('Model posterior', fontsize=plotting_settings['fontsize_labels'])
+
+    if save:
+        fig.savefig('levy_model_posteriors.png', dpi=300, bbox_inches='tight')
