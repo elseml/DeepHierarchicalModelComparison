@@ -19,13 +19,13 @@ Second validation study in which the approximation performance of the networks f
 
 ### [03_levy_flight_application](notebooks/03_levy_flight_application)
 
-Application study in which two formulations of the standard diffusion model are compared to a lévy flight model with a non-Gaussian noise distribution. Consists of five steps:
-- [00_simulator](notebooks/03_levy_flight_application/00_simulator.ipynb): Simulate training and validation data
-- [01_pretrain_networks](notebooks/03_levy_flight_application/01_pretrain_networks.ipynb): Pretrain the network on simulated data with a reduced amount of trials per participant
-- [02_finetune_networks](notebooks/03_levy_flight_application/02_finetune_networks.ipynb): Fine-tune the network on simulated data that contains the same amount of trials per participant as the empirical data
-- [03_validate_networks](notebooks/03_levy_flight_application/03_validate_networks.ipynb): Validate the trained networks on new simulated data sets 
-- [04_apply_networks](notebooks/03_levy_flight_application/04_apply_networks.ipynb): Apply the trained networks to the empirical data set
+Application study in which two variants of the standard diffusion model are compared to two variants a lévy flight model with a non-Gaussian noise distribution. Consists of five steps:
+- [01_simulator](notebooks/03_levy_flight_application/01_simulator.ipynb): Simulate training and validation data
+- [02_pretrain_networks](notebooks/03_levy_flight_application/02_pretrain_networks.ipynb): Pretrain the network on simulated data with a reduced amount of trials per participant
+- [03_finetune_networks](notebooks/03_levy_flight_application/03_finetune_networks.ipynb): Fine-tune the network on simulated data that contains the same amount of trials per participant as the empirical data
+- [04_validate_networks](notebooks/03_levy_flight_application/04_validate_networks.ipynb): Validate the trained networks on new simulated data sets 
+- [05_apply_networks](notebooks/03_levy_flight_application/05_apply_networks.ipynb): Apply the trained networks to the empirical data set
 
 ## [src](src)
 
-Contains custom Julia and Python functions that enable the analyses.
+Contains custom [Julia](src/julia) and [Python](src/python) functions that enable the analyses.
