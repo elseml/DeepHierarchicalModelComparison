@@ -77,3 +77,14 @@ evidence_meta_diffusion = {
     'n_models': 4,
     'activation_out': 'softplus'
 }
+
+
+# Plotting settings
+
+plotting_settings = {
+    'figsize' : (5, 5),
+    'colors_discrete' : ('#440154FF', '#39568CFF', '#1F968BFF', '#73D055FF'),
+    'alpha' : 0.8,
+    'fontsize_labels' : 14,
+    'fontsize_title' : 16,
+}
