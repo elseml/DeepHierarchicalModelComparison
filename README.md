@@ -7,9 +7,9 @@ Contains all analyses reported in the paper.
 ### [01_calibration_validation](notebooks/01_calibration_validation)
 
 First validation study that contains three sub-parts:
-- [calibration_fixed_sizes](notebooks/01_calibration_validation/calibration_fixed_sizes.ipynb): Training and calibration assessment with data sets that all possess the same amount of groups and nested observations.
-- [calibration_variable_observations](notebooks/01_calibration_validation/calibration_variable_observations.ipynb): Training and calibration assessment with data sets that all possess the same amount of groups but vary in their amount of nested observations.
-- [calibration_variable_sizes](notebooks/01_calibration_validation/calibration_variable_sizes.ipynb): Training and calibration assessment with data sets that vary in their amount of groups as well as nested observations.
+- [01_calibration_fixed_sizes](notebooks/01_calibration_validation/01_calibration_fixed_sizes.ipynb): Training and calibration assessment with data sets that all possess the same amount of groups and nested observations.
+- [02_calibration_variable_observations](notebooks/01_calibration_validation/02_calibration_variable_observations.ipynb): Training and calibration assessment with data sets that all possess the same amount of groups but vary in their amount of nested observations.
+- [03_calibration_variable_sizes](notebooks/01_calibration_validation/03_calibration_variable_sizes.ipynb): Training and calibration assessment with data sets that vary in their amount of groups as well as nested observations.
 
 The trained models can be accessed in the respective 'checkpoints' folder.
 
