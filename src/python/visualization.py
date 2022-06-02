@@ -482,3 +482,50 @@ def plot_model_posteriors(dirichlet_samples, labels, save=False):
 
     if save:
         fig.savefig('levy_model_posteriors.png', dpi=300, bbox_inches='tight')
+
+
+# Lévy flight application: Robustness against additional noise
+
+def plot_noise_robustness(noise_proportions, mean_probs, mean_variabilities, labels, save=False):
+    """ Plots the robustness of the model to additional noise (missing values).
+
+    Parameters
+    ----------
+    mean_noise_proportion_list : list
+        Mean noise proportions in the data sets for each noise step. 
+    mean_probs : np.array
+        Mean predictions output by the evidential network for each noise step.
+    mean_variabilities : np.array
+        Standard deviations of the mean predictions over the runs for each noise step.
+    labels : list
+        Model names to be displayed in the legend.
+    save : bool, optional
+        Save plot to current directory.
+    """
+    
+    n_models = mean_probs.shape[1]
+
+    fig, ax = plt.subplots(1, 1, figsize=plotting_settings['figsize'])
+
+    for m in range(n_models):
+        ax.plot(noise_proportions, 
+                mean_probs[:, m], 
+                color=plotting_settings['colors_discrete'][m], 
+                alpha=plotting_settings['alpha'])
+
+    ax.legend(labels) # between loops to correctly display lines and not shaded area
+
+    for m in range(n_models):
+        ax.fill_between(noise_proportions, 
+                        mean_probs[:, m] - mean_variabilities[:, m], 
+                        mean_probs[:, m] + mean_variabilities[:, m], 
+                        color=plotting_settings['colors_discrete'][m], 
+                        alpha=0.2)
+                    
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.set_xlabel('Percentage of missing values', fontsize=plotting_settings['fontsize_labels'])
+    ax.set_ylabel('Posterior model probabilities', fontsize=plotting_settings['fontsize_labels'])
+
+    if save:
+        fig.savefig('levy_noise_robustness.png', dpi=300, bbox_inches='tight')
