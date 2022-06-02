@@ -456,13 +456,14 @@ def plot_validation_results(true_models, preds, labels, save=False):
 
 # Lévy flight application: Visualize PMPs
 
-def plot_model_posteriors(dirichlet_samples, labels, save=False):
+def plot_model_posteriors(dirichlet_samples, labels, title=None, save=False, ax=None):
 
     # Prepare dirichlet samples
     dirichlet_samples = np.squeeze(dirichlet_samples)
 
     # Plot
-    fig, ax = plt.subplots(figsize=plotting_settings['figsize'])
+    if not ax:
+        fig, ax = plt.subplots(1, 1, figsize=plotting_settings['figsize'])
 
     violin_plot = ax.violinplot(dirichlet_samples, showmedians=True)
     colors = plotting_settings['colors_discrete']
@@ -479,9 +480,13 @@ def plot_model_posteriors(dirichlet_samples, labels, save=False):
     ax.set_xticks([1, 2, 3, 4])
     ax.set_xticklabels(labels, fontsize=plotting_settings['fontsize_labels'])
     ax.set_ylabel('Model posterior', fontsize=plotting_settings['fontsize_labels'])
+    ax.set_ylim([0, 1])
+
+    if title:
+        ax.set_title(title, fontsize=plotting_settings['fontsize_title'])
 
     if save:
-        fig.savefig('levy_model_posteriors.png', dpi=300, bbox_inches='tight')
+        plt.savefig('levy_model_posteriors.png', dpi=300, bbox_inches='tight')
 
 
 # Lévy flight application: Robustness against additional noise
