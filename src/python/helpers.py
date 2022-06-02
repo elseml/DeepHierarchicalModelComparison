@@ -313,7 +313,7 @@ def mean_predictions_noisy_data(empirical_data, evidence_net, summary_net, missi
     Parameters
     ----------
     empirical_data : np.array
-        4-dimensional array with shape (n_datasets, n_clusters, n_obs, n_variables)
+        4-dimensional array with shape (n_datasets, n_clusters, n_obs, n_variables).
     evidence_net : EvidentialNetwork
         Trained evidential network.
     summary_net : HierarchicalInvariantNetwork
@@ -368,7 +368,7 @@ def inspect_robustness_noise(added_noise_percentages, empirical_data, evidence_n
     added_noise_percentages : np.array
         Array of noise percentage steps.
     empirical_data : np.array
-        4-dimensional array with shape (n_datasets, n_clusters, n_obs, n_variables)
+        4-dimensional array with shape (n_datasets, n_clusters, n_obs, n_variables).
     evidence_net : EvidentialNetwork
         Trained evidential network.
     summary_net : HierarchicalInvariantNetwork
@@ -408,3 +408,82 @@ def inspect_robustness_noise(added_noise_percentages, empirical_data, evidence_n
     mean_vars = np.squeeze(mean_vars_list)
 
     return mean_noise_proportion_list, mean_probs, mean_sds, mean_vars
+
+
+# Lévy flight application: Robustness against bootstrapping
+
+def inspect_robustness_bootstrap(empirical_data, evidence_net, summary_net, level, n_bootstrap=100):
+    """ Utility function to inspect the robustness of the network to bootstrapping.
+
+    Parameters
+    ----------
+    empirical_data : np.array
+        4-dimensional array with shape (n_datasets, n_clusters, n_obs, n_variables).
+    evidence_net : EvidentialNetwork
+        Trained evidential network.
+    summary_net : HierarchicalInvariantNetwork
+        Trained summary network.
+    level : int
+        Indicating the level to bootstrap; either 'participants' or 'trials'.
+    n_bootstrap : int
+        Number of bootstrap repetitions.
+
+    Returns
+    -------
+    bootstrap_probs : np.array
+        Predictions on the bootstrapped data sets output by the evidential network.
+    """
+
+    if level == 'participants':
+        n = empirical_data.shape[1]
+    elif level == 'trials':
+        n = empirical_data.shape[2]
+
+    bootstrapped_probs = []
+
+    for b in range(n_bootstrap):
+        b_idx = np.random.choice(np.arange(n), size=n, replace=True)
+        if level == 'participants':
+            bootstrapped_data = empirical_data[:,b_idx,:,:]
+        elif level == 'trials':
+            bootstrapped_data = empirical_data[:,:,b_idx,:]
+        probs = evidence_net.predict(summary_net(bootstrapped_data))['m_probs']
+        bootstrapped_probs.append(probs)
+
+    bootstrapped_probs = np.asarray(bootstrapped_probs)[:,0,:]
+
+    return bootstrapped_probs
+
+
+# Lévy flight application: Robustness against leaving single participants out (LOPO)
+
+def inspect_robustness_lopo(empirical_data, evidence_net, summary_net):
+    """ Utility function to inspect the robustness of the network to leaving single participants out (LOPO).
+
+    Parameters
+    ----------
+    empirical_data : np.array
+        4-dimensional array with shape (n_datasets, n_clusters, n_obs, n_variables).
+    evidence_net : EvidentialNetwork
+        Trained evidential network.
+    summary_net : HierarchicalInvariantNetwork
+        Trained summary network.
+
+    Returns
+    -------
+    lopo_probs : np.array
+        Predictions on the LOPO data sets output by the evidential network.
+    """
+
+    n_participants = empirical_data.shape[1]
+
+    lopo_probs = []
+
+    for b in range(n_participants):
+        cropped_data = np.delete(empirical_data, b, axis=1)
+        probs = evidence_net.predict(summary_net(cropped_data))['m_probs']
+        lopo_probs.append(probs)
+
+    lopo_probs = np.asarray(lopo_probs)[:,0,:]
+
+    return lopo_probs
