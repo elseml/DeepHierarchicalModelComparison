@@ -49,7 +49,7 @@ def performance_metrics(bridge_sampling_results, NN_fixed_results, NN_variable_r
         log_score_temp = log_loss(d['true_model'], d['m1_prob'])
         log_score.append(log_score_temp)
 
-        bias_temp = abs(0.5 - d['m1_prob'].mean())
+        bias_temp = (d['true_model'].mean() - d['m1_prob'].mean())
         bias.append(bias_temp)
     
     df = pd.DataFrame([accuracy, roc_auc, mae, rmse, log_score, bias], index=metrics, 
@@ -92,6 +92,6 @@ def bootstrapped_metrics(bridge_sampling_results, NN_fixed_results, NN_variable_
         perf_metrics_bootstrapped.append(perf_metrics)
 
     bootstrapped_mean = pd.DataFrame(np.mean(perf_metrics_bootstrapped, axis=0), index=names, columns=metrics)
-    bootstrapped_sds = pd.DataFrame(np.std(perf_metrics_bootstrapped, axis=0), index=names, columns=metrics)
+    bootstrapped_ses = pd.DataFrame(np.std(perf_metrics_bootstrapped, axis=0), index=names, columns=metrics)
 
-    return bootstrapped_mean, bootstrapped_sds
+    return bootstrapped_mean, bootstrapped_ses
