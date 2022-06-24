@@ -51,38 +51,33 @@ def plot_confusion_matrix(m_true, m_pred, model_names, ax, normalize=True,
         ax.set_title('Confusion Matrix')
 
     
-def plot_calibration_curve(m_true, m_pred, n_bins, pub_style, ax, title=None, show_ece=False):
+def plot_calibration_curve(m_true, m_pred, n_bins, ax, xlabel=True, ylabel=True, title=None, grid=True, show_ece=False):
     """Helper function to plot calibration curve and ece."""
     
     prob_true, prob_pred = calibration_curve(m_true, m_pred, n_bins=n_bins)
     cal_err = np.mean(np.abs(prob_true - prob_pred))
-    if pub_style == True:
-        ax.plot(prob_true, prob_pred, color='#440154FF')
-        ax.plot(ax.get_xlim(), ax.get_xlim(), '--', color='darkgrey')
-        print('ECE = {0:.3f}'.format(cal_err))
 
-    elif pub_style == False:
-        ax.plot(prob_true, prob_pred)
-        ax.plot(ax.get_xlim(), ax.get_xlim(), '--')
-        ax.text(0.1, 0.9,  'ECE = {0:.3f}'.format(cal_err),
-                    horizontalalignment='left',
-                    verticalalignment='center',
-                    transform=ax.transAxes,
-                    size=12)
+    ax.plot(prob_true, prob_pred, color='#440154FF')
+    ax.plot(ax.get_xlim(), ax.get_xlim(), '--', color='darkgrey')
+    print('ECE = {0:.3f}'.format(cal_err))
 
     ax.set_xlim([0, 1])
     ax.set_ylim([0, 1])
     ax.set_xticks([0.2, 0.4, 0.6, 0.8, 1.0])
     ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
-    ax.set_xlabel('Accuracy')
-    ax.set_ylabel('Confidence')
+    if xlabel:
+        ax.set_xlabel('Accuracy')
+    if ylabel:
+        ax.set_ylabel('Confidence')
     ax.set_title(title, fontsize=plotting_settings['fontsize_labels'])
+    if grid:
+        ax.grid(alpha=.3)
     if show_ece:
-        ax.text(0.1, 0.9,  'ECE = {0:.3f}'.format(cal_err),
+        ax.text(0.1, 0.9, r'$\widehat{{\mathrm{{ECE}}}} = {0:.3f}$'.format(cal_err),
                         horizontalalignment='left',
                         verticalalignment='center',
                         transform=ax.transAxes,
-                        size=10)
+                        size=12)
     sns.despine(ax=ax)
     
     
@@ -153,7 +148,7 @@ def perf_tester(evidence_net, summary_net, val_data, n_bootstrap=100, n_cal_bins
         fig, axarr = plt.subplots(2, 2, figsize=(16, 8))
         
         # Plot stuff
-        plot_calibration_curve(m_true, m_soft, n_cal_bins, pub_style, axarr[0, 0])
+        plot_calibration_curve(m_true, m_soft, n_cal_bins, axarr[0, 0])
         plot_confusion_matrix(m_true, m_hard, ['M1', 'M2'], axarr[0, 1])
         plot_bootstrap_accuracy(m_true, m_hard, n_bootstrap, axarr[1, 0])
         plot_bootstrap_mae(m_true, m_hard, n_bootstrap, axarr[1, 1])
@@ -161,7 +156,7 @@ def perf_tester(evidence_net, summary_net, val_data, n_bootstrap=100, n_cal_bins
 
     elif pub_style == True:
         fig, ax = plt.subplots(figsize=(5,5))
-        plot_calibration_curve(m_true, m_soft, n_cal_bins, pub_style, ax)
+        plot_calibration_curve(m_true, m_soft, n_cal_bins, ax)
         if save == True:
             fig.savefig('calibration_fixed_sizes.png', dpi=300, bbox_inches='tight')
 
@@ -372,6 +367,7 @@ def plot_ece_means(ece_means, n_clust_min, n_clust_max, n_obs_min, n_obs_max, x_
     ax.set_ylim([0, 0.4])
     ax.set_xlabel(xlabel)
     ax.set_ylabel('ECE')
+    ax.grid(alpha=.3)
 
 
 # Bridge sampling comparison: Plot approximations
@@ -408,7 +404,7 @@ def plot_approximations(bridge_sampling_results, NN_results, approximated_outcom
 
     ax.scatter(bridge_data, NN_data, c=bridge_sampling_results['true_model'].map(colors), alpha=.8)
     helperlist = [plt.plot([], marker="o", ls="", color=color, alpha=.8)[0] for color in colors.values()] # hack for legend
-    ax.legend(helperlist, [r'Simulated from $\mathcal{M}_1$', 'Simulated from $\mathcal{M}_2$'], loc='upper left')
+    ax.legend(helperlist, [r'Simulated from $\mathcal{M}_1$', 'Simulated from $\mathcal{M}_2$'], loc='upper left', fontsize=12)
     ax.plot(ax.get_xlim(), ax.get_xlim(), '--', color='darkgrey')
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
@@ -440,7 +436,7 @@ def plot_computation_times(bridge_time, NN_fixed_time, NN_variable_time, save=Fa
     ax.set_ylabel('Computation time in minutes', fontsize=plotting_settings['fontsize_labels'])
     ax.set_xlim(xmin=1)
     ax.set_ylim(ymin=0)
-    ax.legend(loc='upper left')
+    ax.legend(loc='upper left', fontsize=12)
 
     # Add a grid for every 10 minutes / datasets
     minor_xticks = np.arange(10, 101, 10)
@@ -474,12 +470,14 @@ def plot_validation_results(true_models, preds, labels, save=False):
     ax_1 = subfigs[1].subplots(nrows=2, ncols=2)
     pos1 = [0,0,1,1]
     pos2 = [0,1,0,1]
+    xlabels = [False, False, True, True]
+    ylabels = [True, False, True, False]
 
     for m in range(4):
         m_true = true_models[:,m]
         m_soft = preds[:,m]
-        plot_calibration_curve(m_true, m_soft, 10, pub_style=True, ax=ax_1[pos1[m], pos2[m]],
-                             title=labels[m], show_ece=True)
+        plot_calibration_curve(m_true, m_soft, 10, ax=ax_1[pos1[m], pos2[m]],
+                               xlabel=xlabels[m] , ylabel=ylabels[m], title=labels[m], show_ece=True)
     
     if save:
         fig.savefig('levy_validation.png', dpi=300, bbox_inches='tight')
@@ -511,7 +509,7 @@ def plot_model_posteriors(dirichlet_samples, labels, title=None, save=False, ax=
 
     ax.set_xticks([1, 2, 3, 4])
     ax.set_xticklabels(labels, fontsize=plotting_settings['fontsize_labels'])
-    ax.set_ylabel('Model posterior', fontsize=plotting_settings['fontsize_labels'])
+    ax.set_ylabel('Posterior model probability', fontsize=plotting_settings['fontsize_labels'])
     ax.set_ylim([0, 1])
 
     if title:
@@ -562,7 +560,7 @@ def plot_noise_robustness(noise_proportions, mean_probs, mean_variabilities, lab
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
     ax.set_xlabel('Percentage of missing values', fontsize=plotting_settings['fontsize_labels'])
-    ax.set_ylabel('Posterior model probabilities', fontsize=plotting_settings['fontsize_labels'])
+    ax.set_ylabel('Posterior model probability', fontsize=plotting_settings['fontsize_labels'])
 
     if save:
         fig.savefig('levy_noise_robustness.png', dpi=300, bbox_inches='tight')
