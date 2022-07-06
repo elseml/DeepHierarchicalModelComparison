@@ -20,13 +20,13 @@ function generate_levy_hyperpriors()::Vector{Float64}
     mu_v1 = rand(Normal(5.0, 1.0))
     sigma_v1 = rand(TruncatedNormal(0.5, 0.25, 0, Inf))
 
-    # t0 (non-decisional time)
+    # t0 (non-decision time)
     mu_t0 = rand(Normal(5.0, 1.0))
     sigma_t0 = rand(TruncatedNormal(0.1, 0.05, 0, Inf))
 
     # alpha (stability parameter of noise distribution)
-    mu_alpha = rand(Normal(1.5, 1))
-    sigma_alpha = rand(TruncatedNormal(1.5, 1, 0, Inf))
+    mu_alpha = rand(Normal(1.65, 0.15))
+    sigma_alpha = rand(TruncatedNormal(0.3, 0.1, 0, Inf))
 
     params = [mu_a, sigma_a,
                 mu_zr, sigma_zr,
@@ -56,12 +56,11 @@ function generate_levy_priors(mu_a::Float64, sigma_a::Float64, mu_zr::Float64, s
     # v1 (drift rate for orange stimuli or word stimuli)
     v1_l = rand(Gamma(mu_v1, sigma_v1))
 
-    # t0 (non-decisional time)
+    # t0 (non-decision time)
     t0_l = rand(Gamma(mu_t0, sigma_t0))
 
     # alpha (stability parameter of noise distribution)
-    alpha_l = logistic.(rand(Normal(mu_alpha, sigma_alpha))).+1.0
-    # invlogit with nested normal to keep between 1 and 2
+    alpha_l = rand(TruncatedNormal(mu_alpha, sigma_alpha, 1, 2))
 
     # intertrial variabilities
     sz = rand(Beta(1,3))
