@@ -51,14 +51,14 @@ def plot_confusion_matrix(m_true, m_pred, model_names, ax, normalize=True,
         ax.set_title('Confusion Matrix')
 
     
-def plot_calibration_curve(m_true, m_pred, n_bins, ax, xlabel=True, ylabel=True, title=None, grid=True, show_ece=False):
-    """Helper function to plot calibration curve and ece."""
+def plot_calibration_curve(m_true, m_pred, n_bins, ax, xlabel=True, ylabel=True, title=None, show_ece=True):
+    """Helper function to plot the calibration curve and ece."""
     
     prob_true, prob_pred = calibration_curve(m_true, m_pred, n_bins=n_bins)
     cal_err = np.mean(np.abs(prob_true - prob_pred))
 
+    ax.plot((0,1), (0,1), '--', color='darkgrey')
     ax.plot(prob_true, prob_pred, color='#440154FF')
-    ax.plot(ax.get_xlim(), ax.get_xlim(), '--', color='darkgrey')
     print('ECE = {0:.3f}'.format(cal_err))
 
     ax.set_xlim([0, 1])
@@ -70,14 +70,11 @@ def plot_calibration_curve(m_true, m_pred, n_bins, ax, xlabel=True, ylabel=True,
     if ylabel:
         ax.set_ylabel('Confidence')
     ax.set_title(title, fontsize=plotting_settings['fontsize_labels'])
-    if grid:
-        ax.grid(alpha=.3)
+    ax.grid(alpha=.3)
     if show_ece:
         ax.text(0.1, 0.9, r'$\widehat{{\mathrm{{ECE}}}} = {0:.3f}$'.format(cal_err),
-                        horizontalalignment='left',
-                        verticalalignment='center',
-                        transform=ax.transAxes,
-                        size=12)
+                horizontalalignment='left', verticalalignment='center',
+                transform=ax.transAxes, size=12)
     sns.despine(ax=ax)
     
     
@@ -109,7 +106,7 @@ def plot_bootstrap_accuracy(m_true, m_pred, n_bootstrap, ax):
     
     
 def plot_bootstrap_mae(m_true, m_pred, n_bootstrap, ax):
-    """Helper function to plot the bootstrap accuracy of recovery."""
+    """Helper function to plot the bootstrap mean absolute error."""
     
     n_test = m_true.shape[0]
     maes = []
@@ -161,6 +158,89 @@ def perf_tester(evidence_net, summary_net, val_data, n_bootstrap=100, n_cal_bins
             fig.savefig('calibration_fixed_sizes.png', dpi=300, bbox_inches='tight')
 
 
+def plot_calibration_curve_uncertainty(m_true, pm_samples_model, narrow_ci, wide_ci, n_bins, ax, 
+                                       xlabel=True, ylabel=True, title=None, show_ece=True, show_legend=True):
+    """ Plots a calibration curve for a single model with uncertainty (median line and two credible intervals).
+
+    Parameters
+    ----------
+    m_true : np.array
+            One-dimensional array that indicates whether the model is true or not. 
+    pm_samples_model : np.array
+            Two-dimensional array containing the posterior samples of the model's probability for each data set.
+    narrow_ci : list
+            The quantiles of the narrow credible interval.
+    wide_ci : list
+            The quantiles of the wide credible interval.
+    n_bins : int
+            Number of calibration bins.
+    ax : matplotlib Axes
+            Matplot axes object specifying the plot that should be used.
+    xlabel : boolean
+            Controls if the x-axis label is shown.
+    ylabel : boolean
+            Controls if the y-axis label is shown.
+    title : str
+            An optional title that can be provided.
+    show_ece : boolean
+            Controls if the Expected Calibration Error is shown.
+    show_legend : boolean
+            Controls if a legend is shown.
+    """
+
+    n_samples = pm_samples_model.shape[1]
+
+    # Get bins & ECE for each sample from the learned dirichlet distribution
+    probs_true = np.zeros((n_samples, n_bins))
+    probs_pred = np.zeros((n_samples, n_bins))
+
+    for n in range(n_samples):
+            m_soft = pm_samples_model[:, n]
+            probs_true[n, :], probs_pred[n, :] = calibration_curve(m_true, m_soft, n_bins=15)
+    cal_err = np.mean(np.abs(probs_true - probs_pred))
+
+    # Get median for each bin 
+    probs_true_median = np.squeeze(np.quantile(probs_true, q=[0.5], axis=0))
+    probs_pred_median = np.squeeze(np.quantile(probs_pred, q=[0.5], axis=0))
+
+    # Get quantiles for each bin 
+    # Narrow credible interval
+    probs_true_narrow = np.quantile(probs_true, q=narrow_ci, axis=0)
+    probs_pred_narrow = np.quantile(probs_pred, q=narrow_ci, axis=0)
+    # Wide credible interval
+    probs_true_wide = np.quantile(probs_true, q=wide_ci, axis=0)
+    probs_pred_wide = np.quantile(probs_pred, q=wide_ci, axis=0)
+
+    # Plot median curve and diagonal
+    ax.plot((0,1), (0,1), '--', color='darkgrey')
+    ax.plot(probs_true_median, probs_pred_median, color='#440154FF')
+
+    # Plot credible intervals
+    ax.fill(np.append(probs_true_narrow[0,:], probs_true_narrow[1,:][::-1]),
+            np.append(probs_pred_narrow[0,:], probs_pred_narrow[1,:][::-1]),
+            color='#440154FF', alpha=0.3, label='{:.0%} CI'.format(narrow_ci[1]-narrow_ci[0]))
+    ax.fill(np.append(probs_true_wide[0,:], probs_true_wide[1,:][::-1]),
+            np.append(probs_pred_wide[0,:], probs_pred_wide[1,:][::-1]),
+            color='#440154FF', alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0]))   
+
+    # Format plot
+    ax.set_xlim([0, 1])
+    ax.set_ylim([0, 1])
+    ax.set_xticks([0.2, 0.4, 0.6, 0.8, 1.0])
+    ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
+    if xlabel:
+            ax.set_xlabel('Accuracy')
+    if ylabel:
+            ax.set_ylabel('Confidence')
+    ax.set_title(title, fontsize=plotting_settings['fontsize_labels'])
+    ax.grid(alpha=.3)
+    if show_ece:
+            ax.text(0.1, 0.9, r'$\widehat{{\mathrm{{ECE}}}} = {0:.3f}$'.format(cal_err),
+                    horizontalalignment='left', verticalalignment='center',
+                    transform=ax.transAxes, size=12)
+    if show_legend:
+            ax.legend(loc="lower right", fontsize=12)
+    sns.despine(ax=ax)
 
 # Calibration: Plotting for training with fixed numbers of clusters and variable number of observations
 
@@ -476,7 +556,7 @@ def plot_validation_results(true_models, preds, labels, save=False):
     for m in range(4):
         m_true = true_models[:,m]
         m_soft = preds[:,m]
-        plot_calibration_curve(m_true, m_soft, 10, ax=ax_1[pos1[m], pos2[m]],
+        plot_calibration_curve(m_true, m_soft, n_bins=15, ax=ax_1[pos1[m], pos2[m]],
                                xlabel=xlabels[m] , ylabel=ylabels[m], title=labels[m], show_ece=True)
     
     if save:
