@@ -161,6 +161,7 @@ def perf_tester(evidence_net, summary_net, val_data, n_bootstrap=100, n_cal_bins
 def plot_calibration_curve_uncertainty(m_true, pm_samples_model, narrow_ci, wide_ci, n_bins, ax, 
                                        xlabel=True, ylabel=True, title=None, show_ece=True, show_legend=True):
     """ Plots a calibration curve for a single model with uncertainty (median line and two credible intervals).
+        Caution: Can throw a ValueError if one of the samples produces an empty bin (i.e. less than 15 bins) -> repeat.
 
     Parameters
     ----------
@@ -195,8 +196,8 @@ def plot_calibration_curve_uncertainty(m_true, pm_samples_model, narrow_ci, wide
     probs_pred = np.zeros((n_samples, n_bins))
 
     for n in range(n_samples):
-            m_soft = pm_samples_model[:, n]
-            probs_true[n, :], probs_pred[n, :] = calibration_curve(m_true, m_soft, n_bins=15)
+        m_soft = pm_samples_model[:, n]
+        probs_true[n, :], probs_pred[n, :] = calibration_curve(m_true, m_soft, n_bins=15)
     cal_err = np.mean(np.abs(probs_true - probs_pred))
 
     # Get median for each bin 
@@ -532,7 +533,7 @@ def plot_computation_times(bridge_time, NN_fixed_time, NN_variable_time, save=Fa
 
 # Lévy flight application: Plot validation results
 
-def plot_validation_results(true_models, preds, labels, save=False):
+def plot_validation_results(true_models, preds, pm_samples, narrow_ci, wide_ci, labels, save=False):
     """ Plots all validation results in one plot. """
 
     true_models_flat = tf.argmax(true_models, axis=1)
@@ -540,7 +541,7 @@ def plot_validation_results(true_models, preds, labels, save=False):
 
     # Create subfigures
     fig = plt.figure(constrained_layout=True, figsize=(10, 5))
-    subfigs = fig.subfigures(nrows=1, ncols=2, wspace=0.07)
+    subfigs = fig.subfigures(nrows=1, ncols=2, wspace=0.07, hspace=0.07)
     
     # Confusion matrix
     ax_0 = subfigs[0].subplots(nrows=1, ncols=1)
@@ -553,11 +554,12 @@ def plot_validation_results(true_models, preds, labels, save=False):
     xlabels = [False, False, True, True]
     ylabels = [True, False, True, False]
 
-    for m in range(4):
-        m_true = true_models[:,m]
-        m_soft = preds[:,m]
-        plot_calibration_curve(m_true, m_soft, n_bins=15, ax=ax_1[pos1[m], pos2[m]],
-                               xlabel=xlabels[m] , ylabel=ylabels[m], title=labels[m], show_ece=True)
+    for m in range(true_models.shape[1]):
+        m_true = true_models[:, m]
+        pm_samples_model = pm_samples[:, :, m]
+        plot_calibration_curve_uncertainty(m_true, pm_samples_model, narrow_ci=narrow_ci, wide_ci=wide_ci, 
+                                           n_bins=15, ax=ax_1[pos1[m], pos2[m]], xlabel=xlabels[m], 
+                                           ylabel=ylabels[m], title=labels[m], show_legend=False)
     
     if save:
         fig.savefig('levy_validation.png', dpi=300, bbox_inches='tight')
