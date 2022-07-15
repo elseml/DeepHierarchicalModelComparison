@@ -58,7 +58,7 @@ def plot_calibration_curve(m_true, m_pred, n_bins, ax, xlabel=True, ylabel=True,
     cal_err = np.mean(np.abs(prob_true - prob_pred))
 
     ax.plot((0,1), (0,1), '--', color='darkgrey')
-    ax.plot(prob_true, prob_pred, color='#440154FF')
+    ax.plot(prob_true, prob_pred, color=plotting_settings['colors_discrete'][0])
     print('ECE = {0:.3f}'.format(cal_err))
 
     ax.set_xlim([0, 1])
@@ -214,15 +214,15 @@ def plot_calibration_curve_uncertainty(m_true, pm_samples_model, narrow_ci, wide
 
     # Plot median curve and diagonal
     ax.plot((0,1), (0,1), '--', color='darkgrey')
-    ax.plot(probs_true_median, probs_pred_median, color='#440154FF')
+    ax.plot(probs_true_median, probs_pred_median, color=plotting_settings['colors_discrete'][0])
 
     # Plot credible intervals
     ax.fill(np.append(probs_true_narrow[0,:], probs_true_narrow[1,:][::-1]),
             np.append(probs_pred_narrow[0,:], probs_pred_narrow[1,:][::-1]),
-            color='#440154FF', alpha=0.3, label='{:.0%} CI'.format(narrow_ci[1]-narrow_ci[0]))
+            color=plotting_settings['colors_discrete'][0], alpha=0.3, label='{:.0%} CI'.format(narrow_ci[1]-narrow_ci[0]))
     ax.fill(np.append(probs_true_wide[0,:], probs_true_wide[1,:][::-1]),
             np.append(probs_pred_wide[0,:], probs_pred_wide[1,:][::-1]),
-            color='#440154FF', alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0]))   
+            color=plotting_settings['colors_discrete'][0], alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0]))   
 
     # Format plot
     ax.set_xlim([0, 1])
@@ -281,7 +281,7 @@ def plot_eces_over_obs(m_true, m_pred, n_obs_min, n_obs_max, n_bins, pub_style, 
         ax.set_title('Expected Calibration Error (ECE)')
 
     elif pub_style == True:
-        ax.plot(n_obs_points, cal_err, color='#440154FF')
+        ax.plot(n_obs_points, cal_err, color=plotting_settings['colors_discrete'][0])
         plt.axhline(y=mean_ece, linestyle='--', color='darkgrey')
         ax.set_ylim([0, 0.3])
 
