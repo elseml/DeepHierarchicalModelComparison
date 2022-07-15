@@ -60,7 +60,8 @@ function generate_levy_priors(mu_a::Float64, sigma_a::Float64, mu_zr::Float64, s
     t0_l = rand(Gamma(mu_t0, sigma_t0))
 
     # alpha (stability parameter of noise distribution)
-    alpha_l = rand(TruncatedNormal(mu_alpha, sigma_alpha, 1, 2))
+    #alpha_l = rand(TruncatedNormal(mu_alpha, sigma_alpha, 1, 2))
+    alpha_l = rand(Uniform(1,2)) # Temporary to check sensitivity against prior choice
 
     # intertrial variabilities
     sz = rand(Beta(1,3))
