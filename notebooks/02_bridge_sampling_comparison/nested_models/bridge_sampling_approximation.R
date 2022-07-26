@@ -6,7 +6,7 @@ np <- import("numpy")
 
 
 ### Set working directory to main folder
-setwd(dirname(dirname(dirname(rstudioapi::getSourceEditorContext()$path))))
+setwd(dirname(dirname(dirname(dirname(rstudioapi::getSourceEditorContext()$path)))))
 
 
 ### Utility functions
@@ -246,6 +246,6 @@ write.table(parameter_estimates, file=exp_file_params)
 write.table(comparison_results, file=exp_file_comp)
 
 ### Load results of earlier experiments
-old_params <- read.table("data/02_bridge_sampling_comparison/2021_11_16___20_08_BF_approx_params")
-old_comp <- read.table("data/02_bridge_sampling_comparison/2021_11_16___20_08_BF_approx_comp")
+old_params <- read.table("data/02_bridge_sampling_comparison/2022_05_03_BF_BS_params")
+old_comp <- read.table("data/02_bridge_sampling_comparison/2022_05_03_BF_BS")
 
