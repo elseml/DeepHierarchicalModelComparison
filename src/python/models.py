@@ -37,7 +37,7 @@ class HierarchicalNormalSimulator:
     
     def gen_from_likelihood(self, theta, sigma2, n_obs):
         """
-        Generates a single hierarchical dataset from the sampled parameter values.
+        Generates a single hierarchical data set from the sampled parameter values.
         ----------
         
         Arguments: 
@@ -50,7 +50,7 @@ class HierarchicalNormalSimulator:
     
     def generate_single(self, model_index, n_clusters, n_obs, mu0=0, tau20=1, sigma_t=1, sigma_s=1):
         """
-        Generates a single hierarchical dataset utilizing the draw_from_prior and gen_from_likelihood functions.
+        Generates a single hierarchical data set utilizing the draw_from_prior and gen_from_likelihood functions.
         ----------
         
         Arguments:
@@ -64,15 +64,15 @@ class HierarchicalNormalSimulator:
         --------
         
         Returns:
-        numpy array of shape (n_clusters, n_obs, n_variables) - contains the simulated hierarchical datasets
+        numpy array of shape (n_clusters, n_obs, n_variables) - contains the simulated hierarchical data sets
         """
         theta, sigma2 = self.draw_from_prior(model_index, n_clusters, mu0, tau20, sigma_t, sigma_s)
         x_generated = self.gen_from_likelihood(theta, sigma2, n_obs)
         return x_generated[...,np.newaxis]
         
-    def simulate(self, batch_size, n_models, n_clusters, n_obs, mu0=0, tau20=1, sigma_t=1, sigma_s=1):
+    def simulate(self, batch_size, n_clusters, n_obs, mu0=0, tau20=1, sigma_t=1, sigma_s=1):
         """
-        Simulates multiple hierarchical datasets. Useful for single usage and debugging (both without the MainSimulator).
+        Simulates multiple hierarchical data sets. Useful for single usage and debugging (both without the MainSimulator).
         ----------
         
         Arguments:
@@ -80,7 +80,7 @@ class HierarchicalNormalSimulator:
         n_models    : int -- number of models to be simulated from
         n_clusters  : int -- number of higher order clusters that the observations are nested in
         n_obs       : int -- number of observations per cluster
-        n_variables : int -- number of variables in the simulated datasets 
+        n_variables : int -- number of variables in the simulated data sets 
         mu0         : float -- higher order mean prior - mean
         tau20       : float -- higher order mean prior - variance
         sigma_t     : float -- higher order variance prior
@@ -88,7 +88,7 @@ class HierarchicalNormalSimulator:
         --------
         
         Returns:
-        numpy array of shape (batch_size * n_models, n_clusters, n_obs, n_variables) - contains the simulated hierarchical datasets
+        numpy array of shape (batch_size * n_models, n_clusters, n_obs, n_variables) - contains the simulated hierarchical data sets
         """
         
         X = []
@@ -131,39 +131,36 @@ class MainSimulator:
         model_indices = np.random.choice(model_base_indices, size=batch_size, p=model_prior)
         return model_indices
     
-    def simulate(self, batch_size, n_obs, n_models, model_prior, 
-                 n_clust_min=2, n_clust_max=100, n_obs_min=2, n_obs_max=200):
+    def simulate(self, batch_size, n_obs, n_vars, n_models, model_prior):
         """
-        Simulates a batch of hierarchical datasets.
+        Simulates a batch of hierarchical data sets.
         ----------
         
         Arguments:
-        batch_size     : int -- number of datasets to be generated per batch
+        batch_size     : int -- number of data sets to be generated per batch
+        n_obs          : function -- generates the number of clusters and observations in the batch
+        n_vars         : int -- number of variables per data set
         n_models       : int -- number of models to be simulated from
         model_prior    : list -- prior model probabilities
-        n_clust_min    : int -- minimum number of clusters
-        n_clust_max    : int -- maximum number of cluster
-        n_obs_min      : int -- minimum number of observations
-        n_obs_max      : int -- maximum number of observations
         --------
         
         Returns:
         dict of {'X' : array of shape (batch_size, n_clusters, n_obs, n_variables),  
                  'm' : array of shape (batch_size)}
         """
-        # Draw K and N (drawn values apply for all datasets in the batch)
+        # Draw K and N (drawn values apply for all data sets in the batch)
         K, N = n_obs
         
         # Draw sampling list of model indices
         model_indices = self.draw_from_model_prior(batch_size, n_models, model_prior)
         
         # Prepare an array to hold simulations
-        X_gen = np.zeros((batch_size, K, N, 1), dtype=np.float32)
+        X_gen = np.zeros((batch_size, K, N, n_vars), dtype=np.float32)
         
         for b in range(batch_size):
             X_gen[b] = self.simulator.generate_single(model_indices[b], K, N)
                
         return to_categorical(model_indices), None, X_gen
     
-    def __call__(self, batch_size, n_obs, n_models=2, model_prior=None):
-        return self.simulate(batch_size, n_obs, n_models, model_prior)
+    def __call__(self, batch_size, n_obs, n_vars=1, n_models=2, model_prior=None):
+        return self.simulate(batch_size, n_obs, n_vars, n_models, model_prior)
