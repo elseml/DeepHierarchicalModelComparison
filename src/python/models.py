@@ -45,7 +45,7 @@ class HierarchicalNormalSimulator:
         n_obs  : int -- number of observations per cluster
         """
         
-        X = np.random.normal(loc=theta, scale=sigma2, size=(n_obs, theta.shape[0])).T 
+        X = np.random.normal(loc=theta, scale=np.sqrt(sigma2), size=(n_obs, theta.shape[0])).T 
         return X
     
     def generate_single(self, model_index, n_clusters, n_obs, mu0=0, tau20=1, sigma_t=1, sigma_s=1):
@@ -97,6 +97,134 @@ class HierarchicalNormalSimulator:
             x_generated = self.gen_from_likelihood(prior_sample, n_obs)
             X.append(x_generated)
         return np.array(X)[...,np.newaxis]
+
+
+class HierarchicalSdtMptSimulator:
+
+    def __init__(self):
+        pass
+
+    def draw_from_prior(self, model_index, n_clusters):
+        """ Draws parameter values from the specified prior distributions of the hyperprior and the conditional prior.
+            Also computes hit and false alarm probabilities for each participant (to be compatible with the MainSimulator class).
+
+        Parameters
+        ----------
+        model_index : int
+            Index of the model to be simulated from.
+        n_clusters : int
+            Number of higher order clusters that the observations are nested in.
+
+        Returns
+        -------
+        p_h_m : np.array
+            Hit probability per cluster.
+        p_h_m : np.array
+            False alarm probability per cluster.
+        """
+
+        RNG = np.random.default_rng()
+        
+        if model_index == 0: # SDT model
+
+            # Hyperpriors
+            mu_h = RNG.normal(1, 0.5)
+            sigma_h = RNG.gamma(1, 1)
+            mu_f = RNG.normal(-1, 0.5)
+            sigma_f = RNG.gamma(1, 1)
+
+            # Group-level priors
+            h_m = RNG.normal(loc=mu_h, scale=sigma_h, size=n_clusters)
+            f_m = RNG.normal(loc=mu_f, scale=sigma_f, size=n_clusters)
+
+            # Transform probit-transformed parameters to probabilities
+            p_h_m = stats.norm.cdf(h_m) 
+            p_f_m = stats.norm.cdf(f_m)
+
+        if model_index == 1: # MPT model
+
+            # Hyperpriors
+            mu_d = RNG.normal(0, 0.5)
+            mu_g = RNG.normal(0, 0.5)
+            lambdas = RNG.uniform(0, 2, size=2)
+            Q = stats.invwishart.rvs(df=3, scale=np.identity(2))
+            sigma = np.matmul(np.matmul(np.diag(lambdas), Q), np.diag(lambdas))
+
+            # Group-level priors
+            params = RNG.multivariate_normal([mu_d, mu_g], sigma, size=n_clusters)
+            d_m = params[:, 0]
+            g_m = params[:, 1]
+            p_d_m = stats.norm.cdf(d_m) # Transform probit-transformed parameters to probabilities
+            p_g_m = stats.norm.cdf(g_m) # Transform probit-transformed parameters to probabilities
+            p_h_m = p_d_m + (1-p_d_m)*p_g_m
+            p_f_m = (1-p_d_m)*p_g_m
+        
+        return p_h_m, p_f_m
+
+    def generate_from_likelihood(self, p_h_m, p_f_m, n_clusters, n_obs):
+        """ Generates a single hierarchical data set from the sampled parameter values.
+
+        Parameters
+        ----------
+        p_h_m : np.array
+            Hit probability per cluster.
+        p_h_m : np.array
+            False alarm probability per cluster.
+        n_clusters : int
+            Number of higher order clusters that the observations are nested in.
+        n_obs : int
+            Number of observations per cluster.
+
+        Returns
+        -------
+        X : np.array
+            Generated data set with shape (n_clusters, n_obs, 2).
+            Contains 2 binary variables with stimulus type and response (for both applies: 0="new" / 1="old").
+        """
+        
+        RNG = np.random.default_rng()
+
+        # Determine amount of signal (old item) and noise (new item) trials
+        assert n_obs%2 == 0, "n_obs has to be dividable by 2."
+        n_trials_per_cat = int(n_obs/2)
+
+        # Create stimulus types (0="new" / 1="old")
+        stim_cluster = np.repeat([[1,0]], repeats=n_trials_per_cat, axis=1) # For 1 participant
+        stim_data_set = np.repeat(stim_cluster, repeats=n_clusters, axis=0) # For 1 data set
+
+        # Create individual responses (0="new" / 1="old")
+        X_h = RNG.binomial(n=1, p=p_h_m, size=(n_trials_per_cat, n_clusters)).T # Old items
+        X_f = RNG.binomial(n=1, p=p_f_m, size=(n_trials_per_cat, n_clusters)).T # New items
+        X_responses = np.concatenate((X_h, X_f), axis=1)
+
+        # Create final data set
+        X = np.stack((stim_data_set, X_responses), axis=2)
+
+        return X
+
+    def generate_single(self, model_index, n_clusters, n_obs):
+        """Generates a single hierarchical data set utilizing the draw_from_prior and gen_from_likelihood functions.
+
+        Parameters
+        ----------
+        model_index : int
+            Index of the model to be simulated from.
+        n_clusters : int
+            Number of higher order clusters that the observations are nested in.
+        n_obs : int
+            Number of observations per cluster.
+
+        Returns
+        -------
+        X : np.array
+            Generated data set with shape (n_clusters, n_obs, 2).
+            Contains 2 binary variables with stimulus type and response (for both applies: 0="new" / 1="old").
+        """
+
+        p_h_m, p_f_m = self.draw_from_prior(model_index, n_clusters)
+        X = self.generate_from_likelihood(p_h_m, p_f_m, n_clusters, n_obs)
+
+        return X
 
 
 class MainSimulator:
