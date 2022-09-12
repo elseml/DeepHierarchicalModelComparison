@@ -144,18 +144,22 @@ class HierarchicalSdtMptSimulator:
         if model_index == 1: # MPT model
 
             # Hyperpriors
-            mu_d = RNG.normal(0, 0.5)
-            mu_g = RNG.normal(0, 0.5)
+            mu_d = RNG.normal(0, 0.25) 
+            mu_g = RNG.normal(0, 0.25)
             lambdas = RNG.uniform(0, 2, size=2)
-            Q = stats.invwishart.rvs(df=3, scale=np.identity(2))
+            Q = stats.invwishart.rvs(df=1.5, scale=np.identity(2)) # df determines covariance between d and g
             sigma = np.matmul(np.matmul(np.diag(lambdas), Q), np.diag(lambdas))
 
             # Group-level priors
             params = RNG.multivariate_normal([mu_d, mu_g], sigma, size=n_clusters)
             d_m = params[:, 0]
             g_m = params[:, 1]
-            p_d_m = stats.norm.cdf(d_m) # Transform probit-transformed parameters to probabilities
-            p_g_m = stats.norm.cdf(g_m) # Transform probit-transformed parameters to probabilities
+
+            # Transform probit-transformed parameters to probabilities
+            p_d_m = stats.norm.cdf(d_m) 
+            p_g_m = stats.norm.cdf(g_m) 
+            
+            # Transform recognition / guess probs to hit / false alarm probs
             p_h_m = p_d_m + (1-p_d_m)*p_g_m
             p_f_m = (1-p_d_m)*p_g_m
         
