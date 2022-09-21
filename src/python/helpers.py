@@ -11,38 +11,38 @@ from time import perf_counter
 # Calibration: Hacks for BayesFlow compatibility. 
 
 # fixed data set sizes
-def n_clust_obs_f_f():
+def n_clust_obs_f_f(n_clusters=50, n_obs=50):
     """
     Nasty hack to make compatible with BayesFlow.
     Defines a fixed number of clusters and observations.
     """
     
-    K = 50
-    N = 50
+    K = n_clusters
+    N = n_obs
     return (K, N)
 
 
 # variable number of observations between data sets
-def n_clust_obs_f_v(n_obs_min, n_obs_max):
+def n_clust_obs_f_v(n_obs_min, n_obs_max, n_clusters=50):
     """
     Nasty hack to make compatible with BayesFlow.
     Defines a fixed number of clusters and a variable number of observations.
     """
     
-    K = 50
+    K = n_clusters
     N = np.random.randint(n_obs_min, n_obs_max)
     return (K, N)
 
 
 # apply nasty hack to validation data generation to work with BayesFlow simulator
-def n_clust_obs_f_v_val(n):
+def n_clust_obs_f_v_val(n_obs, n_clusters=50):
     """
     Nasty hack to make compatible with BayesFlow.
     Defines a fixed number of clusters and a number of observations that is iterated through.
     """
     
-    K = 50
-    N = n
+    K = n_clusters
+    N = n_obs
     return (K, N)
 
 # variable data set sizes
@@ -56,6 +56,39 @@ def n_clust_obs_v_v(n_clust_min, n_clust_max, n_obs_min, n_obs_max):
     N = np.random.randint(n_obs_min, n_obs_max)
     return (K, N)
 
+
+# Calibration: Get multiple predictions to plot with uncertainty.
+
+def get_multiple_predictions(evidence_net, summary_net, simulator, n_models, procedure, n_repetitions=10, n_bootstrap=100):
+    """ Gets multiple predictions from the trained hierarchical network, either via repeated simulation and prediction 
+    or the bootstrapping of the predictions on a single batch of simulated data sets.
+    """
+
+    m_val, _, x_val = simulator()
+    n_data_sets = m_val.shape[0]
+
+    if procedure == 'repeated':
+        
+        m_soft = np.zeros((n_repetitions, n_data_sets))
+        m_true = np.zeros((n_repetitions, n_data_sets))
+
+        for i in range(n_repetitions):
+            m_val, _, x_val = simulator()
+
+            m_soft[i,:] = tf.concat([evidence_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(x_val, 20)], axis=0).numpy()
+            m_true[i] = m_val[:, 1]
+
+    if procedure == 'bootstrap':
+
+        m_soft = np.zeros((n_bootstrap, n_data_sets))
+        m_true = np.zeros((n_bootstrap, n_data_sets))
+
+        for i in range(n_bootstrap):
+            b_idx = np.random.choice(np.arange(n_data_sets), size=n_data_sets, replace=True)
+            m_soft[i,:] = tf.concat([evidence_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(x_val[b_idx], 20)], axis=0).numpy()
+            m_true[i] = m_val[b_idx][:, 1]
+
+    return m_true, m_soft
 
 
 # Bridge sampling comparison: data transformations
@@ -147,7 +180,6 @@ def computation_times(bridge_sampling_results, NN_fixed_results, NN_variable_res
 
 
 # Levy flight application: Load and transform data
-
 
 def load_simulated_rt_data(folder, indices_filename, datasets_filename):
     """Loads and transforms simulated reaction time data.
@@ -423,7 +455,7 @@ def inspect_robustness_bootstrap(empirical_data, evidence_net, summary_net, leve
         Trained evidential network.
     summary_net : HierarchicalInvariantNetwork
         Trained summary network.
-    level : int
+    level : string
         Indicating the level to bootstrap; either 'participants' or 'trials'.
     n_bootstrap : int
         Number of bootstrap repetitions.
@@ -457,7 +489,7 @@ def inspect_robustness_bootstrap(empirical_data, evidence_net, summary_net, leve
 
 # Lévy flight application: Robustness against leaving single participants out (LOPO)
 
-def inspect_robustness_lopo(empirical_data, evidence_net, summary_net):
+def inspect_robustness_lopo(empirical_data, evidence_net, summary_net, print_probs=False):
     """ Utility function to inspect the robustness of the network to leaving single participants out (LOPO).
 
     Parameters
@@ -468,6 +500,8 @@ def inspect_robustness_lopo(empirical_data, evidence_net, summary_net):
         Trained evidential network.
     summary_net : HierarchicalInvariantNetwork
         Trained summary network.
+    print : boolean
+        Optional: Print predictions per participant to find influential participants.
 
     Returns
     -------
@@ -483,6 +517,8 @@ def inspect_robustness_lopo(empirical_data, evidence_net, summary_net):
         cropped_data = np.delete(empirical_data, b, axis=1)
         probs = evidence_net.predict(summary_net(cropped_data))['m_probs']
         lopo_probs.append(probs)
+        if print_probs:
+            print_probs(f'Participant = {b+1} / Predictions  = {probs}')
 
     lopo_probs = np.asarray(lopo_probs)[:,0,:]
 
