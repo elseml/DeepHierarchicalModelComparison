@@ -186,22 +186,10 @@ class EvidentialNetwork(tf.keras.Model):
             for _ in range(meta['n_dense'])
         ])
 
-        # Increase the expressiveness of the separate evidential output
-        self.evidence_layer = tf.keras.Sequential([
-            tf.keras.layers.Dense(**meta['dense_output_args'])
-            for _ in range(meta['n_dense_output'])
-        ]) 
-        # Final evidential output layer
-        self.evidence_layer.add(tf.keras.layers.Dense(meta['n_models'], activation=meta['activation_out']))
+        self.evidence_layer = tf.keras.layers.Dense(meta['n_models'], activation=meta['activation_out'])
 
         if meta.get('multi_task_softmax') is not None:
-            # Increase the expressiveness of the separate softmax output
-            self.softmax_layer = tf.keras.Sequential([
-            tf.keras.layers.Dense(**meta['dense_output_args'])
-            for _ in range(meta['n_dense_output'])
-            ]) 
-            # Final softmax output layer
-            self.softmax_layer.add(tf.keras.layers.Dense(meta['n_models'], activation='softmax'))
+            self.softmax_layer = tf.keras.layers.Dense(meta['n_models'], activation='softmax')
         else:
             self.softmax_layer = None
 
