@@ -186,6 +186,10 @@ class EvidentialNetwork(tf.keras.Model):
             for _ in range(meta['n_dense'])
         ])
         self.evidence_layer = tf.keras.layers.Dense(meta['n_models'], activation=meta['activation_out'])
+        if meta.get('multi_task_softmax') is not None:
+            self.softmax_layer = tf.keras.layers.Dense(meta['n_models'], activation='softmax')
+        else:
+            self.softmax_layer = None
         self.J = meta['n_models']
         
       
@@ -196,16 +200,22 @@ class EvidentialNetwork(tf.keras.Model):
         
         out = self.dense(x)
         alpha = self.evidence_layer(out) + 1
-        return alpha
+        if self.softmax_layer is not None: 
+            probs = self.softmax_layer(out)
+            return alpha, probs
+
+        return  alpha
         
-    def predict(self, obs_data, to_numpy=True):
+    def predict(self, obs_data, output_softmax=False, to_numpy=True):
         """
         Returns the mean, variance and uncertainty implied by the estimated Dirichlet density.
 
         Parameters
         ----------
         obs_data: tf.Tensor
-            Observed data
+            Observed data or respective embeddings created by a summary network
+        output_softmax: bool, default: False
+            Flag that controls whether softmax instead of evidential probabilities are returned     
         to_numpy: bool, default: True
             Flag that controls whether the output is a np.array or tf.Tensor
 
@@ -215,7 +225,16 @@ class EvidentialNetwork(tf.keras.Model):
             Dictionary with keys {m_probs, m_var, uncertainty}
         """
 
-        alpha = self(obs_data)
+        if self.softmax_layer is not None: 
+            alpha, probs = self(obs_data) # adapt to output shape of call()
+            if output_softmax == True: 
+                if to_numpy:
+                    probs = probs.numpy()
+                return {'m_probs': probs}
+
+        else:
+            alpha = self(obs_data)
+
         alpha0 = tf.reduce_sum(alpha, axis=1, keepdims=True)
         mean = alpha / alpha0
         var = alpha * (alpha0 - alpha) / (alpha0 * alpha0 * (alpha0 + 1))

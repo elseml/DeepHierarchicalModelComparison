@@ -35,7 +35,8 @@ evidence_meta_validation = {
     'dense_args': dict(units=64, activation='elu', kernel_initializer='glorot_normal'),
     'n_dense': 2,
     'n_models': 2,
-    'activation_out': 'softplus'
+    'activation_out': 'softplus',
+    'multi_task_softmax': True
 }
 
 # Network settings for levy flight application
