@@ -185,14 +185,29 @@ class EvidentialNetwork(tf.keras.Model):
             tf.keras.layers.Dense(**meta['dense_args'])
             for _ in range(meta['n_dense'])
         ])
-        self.evidence_layer = tf.keras.layers.Dense(meta['n_models'], activation=meta['activation_out'])
+
+        # Increase the expressiveness of the separate evidential output
+        self.evidence_layer = tf.keras.Sequential([
+            tf.keras.layers.Dense(**meta['dense_output_args'])
+            for _ in range(meta['n_dense_output'])
+        ]) 
+        # Final evidential output layer
+        self.evidence_layer.add(tf.keras.layers.Dense(meta['n_models'], activation=meta['activation_out']))
+
         if meta.get('multi_task_softmax') is not None:
-            self.softmax_layer = tf.keras.layers.Dense(meta['n_models'], activation='softmax')
+            # Increase the expressiveness of the separate softmax output
+            self.softmax_layer = tf.keras.Sequential([
+            tf.keras.layers.Dense(**meta['dense_output_args'])
+            for _ in range(meta['n_dense_output'])
+            ]) 
+            # Final softmax output layer
+            self.softmax_layer.add(tf.keras.layers.Dense(meta['n_models'], activation='softmax'))
         else:
             self.softmax_layer = None
+
         self.J = meta['n_models']
         
-      
+
     def call(self, x):
         """
         Forward pass through the evidential network.
@@ -206,6 +221,7 @@ class EvidentialNetwork(tf.keras.Model):
 
         return  alpha
         
+
     def predict(self, obs_data, output_softmax=False, to_numpy=True):
         """
         Returns the mean, variance and uncertainty implied by the estimated Dirichlet density.
@@ -226,7 +242,7 @@ class EvidentialNetwork(tf.keras.Model):
         """
 
         if self.softmax_layer is not None: 
-            alpha, probs = self(obs_data) # adapt to output shape of call()
+            alpha, probs = self(obs_data) # adapt to output shape of call(); only use probs if output_softmax=True
             if output_softmax == True: 
                 if to_numpy:
                     probs = probs.numpy()
@@ -247,6 +263,7 @@ class EvidentialNetwork(tf.keras.Model):
 
         return {'m_probs': mean, 'm_var': var, 'uncertainty': uncertainty}
     
+
     def sample(self, obs_data, n_samples, to_numpy=True):
         """Samples posterior model probabilities from the second-order Dirichlet distro.
 
