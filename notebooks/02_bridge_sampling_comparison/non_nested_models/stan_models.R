@@ -2,7 +2,7 @@ setwd(dirname(rstudioapi::getSourceEditorContext()$path))
 
 
 # Hierarchical SDT model (equal-variance model)
-write('
+write("
 data {
   int<lower = 1> M; // Number of clusters
   int<lower = 1> N; // Number of observations
@@ -32,10 +32,8 @@ transformed parameters {
   vector<lower = 0, upper = 1>[M] p_f_m;
   
   // Transform probit-transformed parameters to probabilities
-  for (m in 1:M) {
-    p_h_m[m] = Phi(h_m[m]);
-    p_f_m[m] = Phi(f_m[m]);
-  }
+  p_h_m = Phi(h_m);
+  p_f_m = Phi(f_m);
 }
 
 model {
@@ -46,20 +44,16 @@ model {
   target += gamma_lpdf(sigma_f | 1, 1); // Careful: numpy uses scale, Stan inverse scale
 
   // Group-level priors
-  for (m in 1:M) {
-    target += normal_lpdf(h_m[m] | mu_h, sigma_h);
-    target += normal_lpdf(f_m[m] | mu_f, sigma_f);
-  }
+  target += normal_lpdf(h_m | mu_h, sigma_h);
+  target += normal_lpdf(f_m | mu_f, sigma_f);
   
   // Individual observations / likelihood
   for (m in 1:M) {
-    for (n in 1:N_old_new) {
-      target += bernoulli_lpmf(X_h[m,n] | p_h_m[m]);
-      target += bernoulli_lpmf(X_f[m,n] | p_f_m[m]);
-    }
+    target += bernoulli_lpmf(X_h[m] | p_h_m[m]);
+    target += bernoulli_lpmf(X_f[m] | p_f_m[m]);
   }
-}',
-'sdt_model.stan')
+}",
+"sdt_model.stan")
 
 
 # Test if model can be compiled
@@ -67,7 +61,7 @@ library(rstan)
 stanc("sdt_model.stan")
 
 # Hierarchical MPT model (latent-trait 2HTM)
-write('
+write("
 data {
   int<lower = 1> M; // Number of clusters
   int<lower = 1> N; // Number of observations
@@ -85,14 +79,17 @@ parameters {
   real mu_d;
   real mu_g;
   vector<lower = 0, upper = 2>[2] lambdas;
-  cov_matrix[2] Q; // ensures symmetric and pos. definite outcome of inv-wishart sampling
+  // cov_matrix[2] Q; // ensures symmetric and pos. definite outcome of inv-wishart sampling
+  corr_matrix[2] Q;
   
   // Group-level priors
-  matrix[M, 2] params;
+  matrix[2, M] z;
 }
   
 transformed parameters {
   cov_matrix[2] Sigma;
+  matrix[2, 2] L; // Cholesky factor
+  matrix[M, 2] params;
   vector<lower = 0, upper = 1>[M] p_d_m;
   vector<lower = 0, upper = 1>[M] p_g_m;
   vector<lower = 0, upper = 1>[M] p_h_m;
@@ -101,12 +98,17 @@ transformed parameters {
   // Calculate scaled inverse-wishart covariance matrix
   Sigma = (diag_matrix(lambdas) * Q) * diag_matrix(lambdas);
   
+  // Apply cholesky decomposition to Sigma
+  L = cholesky_decompose(Sigma);
+  
+  // Reparameterize multivariate normal
+  params = (rep_matrix([mu_d, mu_g]', M) + L * z)';
+  // rep_matrix matches [2, M] shape of z
+  // transpose at the end to recieve more intuitive [M, 2] shape
   
   // Transform probit-transformed parameters to probabilities
-  for (m in 1:M) {
-    p_d_m[m] = Phi(params[m, 1]);
-    p_g_m[m] = Phi(params[m, 2]);
-  }
+  p_d_m = Phi(params[, 1]); // params[, 1] = d_m
+  p_g_m = Phi(params[, 2]); // params[, 2] = g_m
   
   // Transform recognition/guess probs to hit/false alarm probs
   p_h_m = p_d_m + (1-p_d_m) .* p_g_m;
@@ -118,22 +120,21 @@ model {
   target += normal_lpdf(mu_d | 0, 0.25);
   target += normal_lpdf(mu_g | 0, 0.25);
   target += uniform_lpdf(lambdas | 0.0, 2.0);
-  target += inv_wishart_lpdf(Q| 2, diag_matrix(rep_vector(1.0, 2))); // diag_matrix(rep_vector(1, 2)) = stan version of R command diag(2)
+  //target += inv_wishart_lpdf(Q| 2, diag_matrix(rep_vector(1.0, 2))); // diag_matrix(rep_vector(1, 2)) = stan version of R command diag(2)
+  target += lkj_corr_lpdf(Q|1);
 
   // Group-level priors
   for (m in 1:M) {
-    target += multi_normal_lpdf(params[m] | [mu_d, mu_g], Sigma);
+    target += std_normal_lpdf(z[, m]);
   }
   
   // Individual observations / likelihood
   for (m in 1:M) {
-    for (n in 1:N_old_new) {
-      target += bernoulli_lpmf(X_h[m,n] | p_h_m[m]);
-      target += bernoulli_lpmf(X_f[m,n] | p_f_m[m]);
-    }
+    target += bernoulli_lpmf(X_h[m] | p_h_m[m]);
+    target += bernoulli_lpmf(X_f[m] | p_f_m[m]);
   }
-}',
-'mpt_model.stan')
+}",
+"mpt_model.stan")
 
 # Test if model can be compiled
 library(rstan)
