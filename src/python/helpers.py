@@ -59,7 +59,7 @@ def n_clust_obs_v_v(n_clust_min, n_clust_max, n_obs_min, n_obs_max):
 
 # Calibration: Get multiple predictions to plot with uncertainty.
 
-def get_multiple_predictions(evidence_net, summary_net, simulator, n_models, procedure, n_repetitions=10, n_bootstrap=100):
+def get_multiple_predictions(evidence_net, summary_net, simulator, n_models, procedure, output_softmax=False, n_repetitions=10, n_bootstrap=100):
     """ Gets multiple predictions from the trained hierarchical network, either via repeated simulation and prediction 
     or the bootstrapping of the predictions on a single batch of simulated data sets.
     """
@@ -75,7 +75,7 @@ def get_multiple_predictions(evidence_net, summary_net, simulator, n_models, pro
         for i in range(n_repetitions):
             m_val, _, x_val = simulator()
 
-            m_soft[i,:] = tf.concat([evidence_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(x_val, 20)], axis=0).numpy()
+            m_soft[i,:] = tf.concat([evidence_net.predict(summary_net(x_chunk), output_softmax)['m_probs'][:, 1] for x_chunk in tf.split(x_val, 20)], axis=0).numpy()
             m_true[i] = m_val[:, 1]
 
     if procedure == 'bootstrap':
@@ -85,7 +85,7 @@ def get_multiple_predictions(evidence_net, summary_net, simulator, n_models, pro
 
         for i in range(n_bootstrap):
             b_idx = np.random.choice(np.arange(n_data_sets), size=n_data_sets, replace=True)
-            m_soft[i,:] = tf.concat([evidence_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(x_val[b_idx], 20)], axis=0).numpy()
+            m_soft[i,:] = tf.concat([evidence_net.predict(summary_net(x_chunk), output_softmax)['m_probs'][:, 1] for x_chunk in tf.split(x_val[b_idx], 20)], axis=0).numpy()
             m_true[i] = m_val[b_idx][:, 1]
 
     return m_true, m_soft
