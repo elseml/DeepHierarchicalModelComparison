@@ -112,7 +112,7 @@ class HierarchicalSdtMptSimulator:
         ----------
         model_index : int
             Index of the model to be simulated from.
-        n_clusters : int
+        n_clusters : int<
             Number of higher order clusters that the observations are nested in.
 
         Returns
@@ -146,8 +146,8 @@ class HierarchicalSdtMptSimulator:
             # Hyperpriors
             mu_d = RNG.normal(0, 0.25) 
             mu_g = RNG.normal(0, 0.25)
-            lambdas = RNG.uniform(0, 2, size=2)
-            Q = stats.invwishart.rvs(df=1.5, scale=np.identity(2)) # df determines covariance between d and g
+            lambdas = RNG.uniform(0, 2, size=2) # upper limit determines scaling of correlation matrix (low = low sds of random effects)
+            Q = stats.invwishart.rvs(df=3, scale=np.identity(2)) # df determines correlations between d and g (low = higher correlations, 3 = uniform)
             sigma = np.matmul(np.matmul(np.diag(lambdas), Q), np.diag(lambdas))
 
             # Group-level priors
