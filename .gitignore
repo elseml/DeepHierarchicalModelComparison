@@ -1,5 +1,13 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+*.png
+*.Rhistory
+
+# Tensorflow checkpoints
+ckpt* 
+
+# Folders
 data
 figures
 legacy
-*.png
-*.Rhistory
