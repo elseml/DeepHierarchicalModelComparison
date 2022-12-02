@@ -62,7 +62,7 @@ test_data_true_indices <- np$load("data/02_bridge_sampling_comparison/non_nested
 ### prepare result matrices
 
 # prepare matrices for parameter recovery results
-column_names_pars <- c("dataset","true_model","mean(p_h_m)","var(p_h_m)","mean(p_h_m)","var(p_h_m)",
+column_names_pars <- c("dataset","true_model","mean(p_h_m)","var(p_h_m)","mean(p_f_m)","var(p_f_m)",
                        "mu_h","sigma_h","mu_f","sigma_f","mu_d","mu_g","lambdas_1","lambdas_2",
                        "Q[1,1]","Q[1,2]","Q[2,1]","Q[2,2]")
 # SDT model
@@ -102,8 +102,8 @@ print(compile_time)
 
 ### Loop over test data sets
 
-#for (i in 1:dim(test_data)[1]){    
-  for (i in 1:2){                       # FOR TESTING: 1:x
+for (i in 1:dim(test_data)[1]){    
+#for (i in 1:2){                       # FOR TESTING: 1:x
   
   # select data set
   test_data_single <- test_data[i,,,]
@@ -200,11 +200,14 @@ comparison_results
 
 ### Export experimental results
 exp_time <- format(Sys.time(), '%Y_%m_%d')
-exp_file_params <- sprintf("data/02_bridge_sampling_comparison/nested_models/%s_BF_BS_params", exp_time)
-exp_file_comp <- sprintf("data/02_bridge_sampling_comparison/nested_models/%s_BF_BS", exp_time)
+exp_file_params <- sprintf("data/02_bridge_sampling_comparison/non_nested_models/%s_BF_BS_params", exp_time)
+exp_file_comp <- sprintf("data/02_bridge_sampling_comparison/non_nested_models/%s_BF_BS", exp_time)
 
 write.table(parameter_estimates, file=exp_file_params)
 write.table(comparison_results, file=exp_file_comp)
+
+
+
 
 ### Load results of earlier experiments
 old_params <- read.table("data/02_bridge_sampling_comparison/nested_models/2022_05_03_BF_BS_params")
