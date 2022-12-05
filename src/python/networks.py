@@ -181,20 +181,25 @@ class EvidentialNetwork(tf.keras.Model):
         """
         
         super(EvidentialNetwork, self).__init__()
-        
-        #self.dense = tf.keras.Sequential([
-        #    tf.keras.layers.Dense(**meta['dense_args'])
-        #    for _ in range(meta['n_dense'])
-        #])
 
-        self.dense = tf.keras.models.Sequential()
+        if meta['dropout'] == True:
+            # Dropout hidden layers
+            self.dense = tf.keras.models.Sequential()
+            for _ in range(meta['n_dense']):
+                self.dense.add(tf.keras.layers.Dense(**meta['dense_args']))
+                self.dense.add(MCDropout(dropout_prob=0.1))
 
-        for _ in range(meta['n_dense']):
-            self.dense.add(tf.keras.layers.Dense(**meta['dense_args']))
-            self.dense.add(MCDropout(dropout_prob=0.1))
+        else:
+            # Hidden layers
+            self.dense = tf.keras.Sequential([
+                tf.keras.layers.Dense(**meta['dense_args'])
+                for _ in range(meta['n_dense'])
+            ])
 
+        # Evidential output layers
         #self.evidence_layer = tf.keras.layers.Dense(meta['n_models'], activation=meta['activation_out'])
 
+        # Softmax output layers
         if meta.get('multi_task_softmax') is not None:
             self.softmax_layer = tf.keras.layers.Dense(meta['n_models'], activation='softmax')
         else:

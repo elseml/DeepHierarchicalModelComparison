@@ -36,7 +36,8 @@ evidence_meta_validation = {
     'n_dense': 2,
     'n_models': 2,
     'activation_out': 'softplus',
-    'multi_task_softmax': True
+    'multi_task_softmax': True,
+    'dropout': False
 }
 
 # Network settings for levy flight application
