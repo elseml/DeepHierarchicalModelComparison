@@ -31,29 +31,36 @@ from bayesflow.losses import log_loss
 n_runs_per_setting = 1
 
 ### Hyperparameter tuning params (cosine decay w/ restarts)
-initial_lr_list = [0.00065, 0.0006, 0.00055, 0.0005]
-m_mul_list = [0.95, 0.9, 0.85, 0.8, 0.75]
+dropout_list = [False, True]
+input_noise_list = [False, True]
 
-results = []
-
-n_combinations = len(initial_lr_list)*len(m_mul_list)*n_runs_per_setting
+n_combinations = len(dropout_list)*len(input_noise_list)*n_runs_per_setting
 
 ### prepare static components
-# Learning rate
-first_decay_steps = 1000
-t_mul = 2
-alpha = 0.2
+results = []
+
+# Training steps
+epochs=15 
+iterations_per_epoch=1000
+
+# Cosine decaying learning rate
+initial_lr = 0.0005
+decay_steps = epochs*iterations_per_epoch
+alpha = 0
+lr_schedule = CosineDecay(
+    initial_lr, decay_steps, alpha=alpha
+    )
 
 # Sample size
-n_clusters = 75
+n_clusters = 25
 n_obs = 50
 
 # Storage path
 file_path = os.path.join(os.getcwd(),'notebooks\\02_bridge_sampling_comparison\\non_nested_models\\hyperparameter_tuning_results')
 
 ### Run tuning
-for initial_lr in initial_lr_list:
-    for m_mul in m_mul_list:
+for dropout in dropout_list:
+    for input_noise in input_noise_list:
         for run in range(n_runs_per_setting):
     
             # Initialize from scratch for each run
@@ -64,14 +71,10 @@ for initial_lr in initial_lr_list:
     
             simulator = MainSimulator(HierarchicalSdtMptSimulator())
     
-            lr_schedule_restart = CosineDecayRestarts(
-                initial_lr, first_decay_steps, t_mul=t_mul, m_mul=m_mul, alpha=alpha
-                )
-    
             trainer = ModelComparisonTrainer(
                 network=amortizer, 
                 generative_model=simulator, 
-                loss=partial(multi_task_loss, kl_weight=0.25),
+                loss=partial(softmax_loss),
                 optimizer=partial(Adam, lr_schedule_restart),
                 skip_checks=True,
                 )
@@ -87,19 +90,19 @@ for initial_lr in initial_lr_list:
     
             # Store results
             results.append({
-                'initial_lr': initial_lr,
-                'm_mul': m_mul,
+                'dropout': dropout,
+                'input noise': input_noise,
                 'final_loss': final_loss
             })
     
             # Print progress & secure progess
-            if len(results) == n_combinations*0.25:
+            if len(results) == round(n_combinations*0.25):
                 print('25% done')
                 pd.DataFrame(results).to_csv(file_path) # intermediate save
-            if len(results) == n_combinations*0.50:
+            if len(results) == round(n_combinations*0.50):
                 print('50% done')
                 pd.DataFrame(results).to_csv(file_path) # intermediate save
-            if len(results) == n_combinations*0.75:
+            if len(results) == round(n_combinations*0.75):
                 print('75% done')
                 pd.DataFrame(results).to_csv(file_path) # intermediate save
 
