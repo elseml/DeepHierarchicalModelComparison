@@ -1,6 +1,7 @@
 import numpy as np
 np.set_printoptions(suppress=True)
 import tensorflow as tf
+from tensorflow.keras.layers import Dropout
 
 
 
@@ -181,12 +182,18 @@ class EvidentialNetwork(tf.keras.Model):
         
         super(EvidentialNetwork, self).__init__()
         
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(**meta['dense_args'])
-            for _ in range(meta['n_dense'])
-        ])
+        #self.dense = tf.keras.Sequential([
+        #    tf.keras.layers.Dense(**meta['dense_args'])
+        #    for _ in range(meta['n_dense'])
+        #])
 
-        self.evidence_layer = tf.keras.layers.Dense(meta['n_models'], activation=meta['activation_out'])
+        self.dense = tf.keras.models.Sequential()
+
+        for _ in range(meta['n_dense']):
+            self.dense.add(tf.keras.layers.Dense(**meta['dense_args']))
+            self.dense.add(MCDropout(dropout_prob=0.1))
+
+        #self.evidence_layer = tf.keras.layers.Dense(meta['n_models'], activation=meta['activation_out'])
 
         if meta.get('multi_task_softmax') is not None:
             self.softmax_layer = tf.keras.layers.Dense(meta['n_models'], activation='softmax')
@@ -202,12 +209,13 @@ class EvidentialNetwork(tf.keras.Model):
         """
         
         out = self.dense(x)
-        alpha = self.evidence_layer(out) + 1
+        #alpha = self.evidence_layer(out) + 1
         if self.softmax_layer is not None: 
             probs = self.softmax_layer(out)
-            return alpha, probs
+            #return alpha, probs
+            return probs
 
-        return  alpha
+        #return  alpha
         
 
     def predict(self, obs_data, output_softmax=False, to_numpy=True):
@@ -230,7 +238,8 @@ class EvidentialNetwork(tf.keras.Model):
         """
 
         if self.softmax_layer is not None: 
-            alpha, probs = self(obs_data) # adapt to output shape of call(); only use probs if output_softmax=True
+            #alpha, probs = self(obs_data) # adapt to output shape of call(); only use probs if output_softmax=True
+            probs = self(obs_data)
             if output_softmax == True: 
                 if to_numpy:
                     probs = probs.numpy()
@@ -281,3 +290,45 @@ class EvidentialNetwork(tf.keras.Model):
         if not to_numpy:
              pm_samples = tf.convert_to_tensor(pm_samples, dtype=tf.float32)
         return pm_samples
+
+
+class MCDropout(tf.keras.Model):
+    """Implements Monte Carlo Dropout as a Bayesian approximation according to [1].
+
+    Perhaps not the best approximation, but arguably the cheapest one out there!
+
+    [1] Gal, Y., & Ghahramani, Z. (2016, June). Dropout as a bayesian approximation: 
+    Representing model uncertainty in deep learning. 
+    In international conference on machine learning (pp. 1050-1059). PMLR.
+    """
+
+    def __init__(self, dropout_prob=0.1, **kwargs):
+        """Creates a custom instance of an MC Dropout layer. Will be used both
+        during training and inference.
+        
+        Parameters
+        ----------
+        dropout_prob  : float, optional, default: 0.1
+            The dropout rate to be passed to ``tf.nn.experimental.stateless_dropout()``.
+            
+        """
+        super().__init__(**kwargs)
+        self.drop = tf.keras.layers.Dropout(dropout_prob)
+
+    def call(self, inputs):
+        """Randomly sets elements of ``inputs`` to zero.
+
+        Parameters
+        ----------
+        inputs : tf.Tensor
+            Input of shape (batch_size, ...)
+        
+        Returns
+        -------
+        out    : tf.Tensor
+            Output of shape (batch_size, ...), same as ``inputs``.
+
+        """
+
+        out = self.drop(inputs, training=True)
+        return out
