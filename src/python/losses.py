@@ -78,15 +78,9 @@ def softmax_loss(network, model_indices, sim_data):
     # Compute evidences and softmax probabilities
     softmax_probs = network(sim_data)
 
-    ## Add noise to indices
-    # hacky code that adds/substracts a random amount of noise to the 0s and 1s of the class labels
-    noise = abs(tf.random.normal(shape=[model_indices.shape[0]], mean=0, stddev=0.05))
-    noise = (np.dstack([noise]*model_indices.shape[1]))[0,:,:] # cast to model_indices shape
-    model_indices = np.where(model_indices == 0, model_indices+noise, model_indices)
-    model_indices = np.where(model_indices == 1, model_indices-noise, model_indices)
-
     # Numerical stability
     softmax_probs = tf.clip_by_value(softmax_probs, 1e-15, 1 - 1e-15)
+    
     # Compute softmax loss
     cat_cross_entropy = CategoricalCrossentropy()
     softmax_loss = cat_cross_entropy(model_indices, softmax_probs)
