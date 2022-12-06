@@ -4,18 +4,14 @@ from sklearn.metrics import log_loss, roc_auc_score
 
 
 
-def performance_metrics(bridge_sampling_results, NN_fixed_results, NN_variable_results, names, metrics):
+def performance_metrics(results_list, names, metrics):
     """ 
     Calculates various metrics to compare approximation performance.
 
     Parameters
     ----------
-    bridge_sampling_results : pd.DataFrame
-        Bridge Sampling approximations
-    NN_fixed_results : pd.DataFrame
-        Neural network (trained on fixed sample sizes) approximations
-    NN_variable_results : pd.DataFrame
-        Neural network (trained on varying sample sizes) approximations
+    results_list : list of pd.DataFrame objects
+        Contains the results of bridge sampling and a number of neural network variants
     names : list
         Method names
 
@@ -32,8 +28,7 @@ def performance_metrics(bridge_sampling_results, NN_fixed_results, NN_variable_r
     log_score = []
     bias = []
 
-    
-    for d in (bridge_sampling_results, NN_fixed_results, NN_variable_results):
+    for d in results_list:
         accuracy_temp = (d['true_model'] == d['selected_model']).mean()
         accuracy.append(accuracy_temp)
 
@@ -59,36 +54,28 @@ def performance_metrics(bridge_sampling_results, NN_fixed_results, NN_variable_r
 
 
 
-def bootstrapped_metrics(bridge_sampling_results, NN_fixed_results, NN_variable_results, n_bootstrap, names, metrics):
+def bootstrapped_metrics(results_list, n_bootstrap, names, metrics):
     """
     Calculates bootstrapped performance metrics.
 
     Parameters
     ----------
+    results_list : list of pd.DataFrame objects
+        Contains the results of bridge sampling and a number of neural network variants
     n_bootstrap : integer
         Number of bootstrap steps
-    bridge_sampling_results : pd.DataFrame
-        Bridge sampling approximations
-    NN_fixed_results : pd.DataFrame
-        Neural network (trained on fixed sample sizes) approximations
-    NN_variable_results : pd.DataFrame
-        Neural network (trained on varying sample sizes) approximations
     names : list
         Method names
     """
 
-    n_test = bridge_sampling_results.shape[0]
+    n_test = results_list[0].shape[0] # number of test data sets
 
     perf_metrics_bootstrapped = []
 
     for b in range(n_bootstrap):
         b_idx = np.random.choice(np.arange(n_test), size=n_test, replace=True)
-        perf_metrics = performance_metrics(
-                            bridge_sampling_results.iloc[b_idx,:], 
-                            NN_fixed_results.iloc[b_idx,:], 
-                            NN_variable_results.iloc[b_idx,:], 
-                            names, metrics
-                            )
+        results_list_bootstrapped = [x.iloc[b_idx,:] for x in results_list]
+        perf_metrics = performance_metrics(results_list_bootstrapped, names, metrics)
         perf_metrics_bootstrapped.append(perf_metrics)
 
     bootstrapped_mean = pd.DataFrame(np.mean(perf_metrics_bootstrapped, axis=0), index=names, columns=metrics)
