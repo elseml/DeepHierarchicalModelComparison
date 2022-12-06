@@ -264,7 +264,7 @@ class MainSimulator:
         model_indices = np.random.choice(model_base_indices, size=batch_size, p=model_prior)
         return model_indices
     
-    def simulate(self, batch_size, n_obs, n_vars, n_models, model_prior, add_noise_std):
+    def simulate(self, batch_size, n_obs, n_vars, n_models, model_prior):
         """
         Simulates a batch of hierarchical data sets.
         ----------
@@ -290,16 +290,10 @@ class MainSimulator:
         # Prepare an array to hold simulations
         X_gen = np.zeros((batch_size, K, N, n_vars), dtype=np.float32)
 
-        # add noise to simulated training data (input noise)?
-        if add_noise_std:
-            for b in range(batch_size):
-                X_gen[b] = self.simulator.generate_single(model_indices[b], K, N) + tf.random.normal(shape=(K, N, n_vars), mean=0, stddev=add_noise_std)
-        
-        else:
-            for b in range(batch_size):
-                X_gen[b] = self.simulator.generate_single(model_indices[b], K, N)
+        for b in range(batch_size):
+            X_gen[b] = self.simulator.generate_single(model_indices[b], K, N)
                
         return to_categorical(model_indices), None, X_gen
     
-    def __call__(self, batch_size, n_obs, n_vars=1, n_models=2, model_prior=None, add_noise_std=None):
-        return self.simulate(batch_size, n_obs, n_vars, n_models, model_prior, add_noise_std)
+    def __call__(self, batch_size, n_obs, n_vars=1, n_models=2, model_prior=None):
+        return self.simulate(batch_size, n_obs, n_vars, n_models, model_prior)

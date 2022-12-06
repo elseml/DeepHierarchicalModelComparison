@@ -1,4 +1,4 @@
-# Network settings for validation experiments (calibration + bridge sampling comparison)
+# Network settings for validation experiments
 summary_meta_validation = {
     'level_1': {
         'inv_inner': {
@@ -31,13 +31,10 @@ summary_meta_validation = {
         'n_equiv': 2,
     },
 }
-evidence_meta_validation = {
+probability_meta_validation = {
     'dense_args': dict(units=64, activation='elu', kernel_initializer='glorot_normal'),
     'n_dense': 2,
-    'n_models': 2,
-    'activation_out': 'softplus',
-    'multi_task_softmax': True,
-    'dropout': False
+    'n_models': 2
 }
 
 # Network settings for levy flight application
@@ -73,11 +70,10 @@ summary_meta_diffusion = {
         'n_equiv': 2,
     },
 }
-evidence_meta_diffusion = {
+probability_meta_diffusion = {
     'dense_args': dict(units=64, activation='elu', kernel_initializer='glorot_normal'),
     'n_dense': 2,
-    'n_models': 4,
-    'activation_out': 'softplus'
+    'n_models': 4
 }
 
 

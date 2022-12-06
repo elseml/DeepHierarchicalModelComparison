@@ -166,174 +166,63 @@ class HierarchicalInvariantNetwork(tf.keras.Model):
         return out
     
     
-class EvidentialNetwork(tf.keras.Model):
+class ModelProbabilityNetwork(tf.keras.Model):
     """
-    Implements a network that infers the parameters of a dirichlet distribution in order to quantify model evidences.
+    Implements a network that infers the posterior probabilities of competing statistical models.
     """
     
     def __init__(self, meta):
         """
-        Creates an evidential network.
+        Creates an model probability network.
         ----------
         
         Arguments:
-        model_settings : dict -- hyperparameter settings for the evidential network
+        meta : dict -- hyperparameter settings for the model probability network
         """
         
-        super(EvidentialNetwork, self).__init__()
+        super(ModelProbabilityNetwork, self).__init__()
 
-        if meta['dropout'] == True:
-            # Dropout hidden layers
-            self.dense = tf.keras.models.Sequential()
-            for _ in range(meta['n_dense']):
-                self.dense.add(tf.keras.layers.Dense(**meta['dense_args']))
-                self.dense.add(MCDropout(dropout_prob=0.1))
+        # Hidden layers
+        self.dense = tf.keras.Sequential([
+            tf.keras.layers.Dense(**meta['dense_args'])
+            for _ in range(meta['n_dense'])
+        ])
 
-        else:
-            # Hidden layers
-            self.dense = tf.keras.Sequential([
-                tf.keras.layers.Dense(**meta['dense_args'])
-                for _ in range(meta['n_dense'])
-            ])
-
-        # Evidential output layers
-        #self.evidence_layer = tf.keras.layers.Dense(meta['n_models'], activation=meta['activation_out'])
-
-        # Softmax output layers
-        if meta.get('multi_task_softmax') is not None:
-            self.softmax_layer = tf.keras.layers.Dense(meta['n_models'], activation='softmax')
-        else:
-            self.softmax_layer = None
+        # Output layer
+        self.softmax_layer = tf.keras.layers.Dense(meta['n_models'], activation='softmax')
 
         self.J = meta['n_models']
-        
 
     def call(self, x):
         """
-        Forward pass through the evidential network.
+        Forward pass through the model probability network that returns approximated model probabilities.
         """
         
         out = self.dense(x)
-        #alpha = self.evidence_layer(out) + 1
-        if self.softmax_layer is not None: 
-            probs = self.softmax_layer(out)
-            #return alpha, probs
-            return probs
+        probs = self.softmax_layer(out)
 
-        #return  alpha
-        
+        return probs
 
-    def predict(self, obs_data, output_softmax=False, to_numpy=True):
+    def predict(self, obs_data, to_numpy=True):
         """
-        Returns the mean, variance and uncertainty implied by the estimated Dirichlet density.
+        Returns a dictionary with approximated model probabilities that are optionally in numpy format.
 
         Parameters
         ----------
         obs_data: tf.Tensor
             Observed data or respective embeddings created by a summary network
-        output_softmax: bool, default: False
-            Flag that controls whether softmax instead of evidential probabilities are returned     
         to_numpy: bool, default: True
             Flag that controls whether the output is a np.array or tf.Tensor
 
         Returns
         -------
         out: dict
-            Dictionary with keys {m_probs, m_var, uncertainty}
+            Dictionary with key {m_probs}
         """
 
-        if self.softmax_layer is not None: 
-            #alpha, probs = self(obs_data) # adapt to output shape of call(); only use probs if output_softmax=True
-            probs = self(obs_data)
-            if output_softmax == True: 
-                if to_numpy:
-                    probs = probs.numpy()
-                return {'m_probs': probs}
-
-        else:
-            alpha = self(obs_data)
-
-        alpha0 = tf.reduce_sum(alpha, axis=1, keepdims=True)
-        mean = alpha / alpha0
-        var = alpha * (alpha0 - alpha) / (alpha0 * alpha0 * (alpha0 + 1))
-        uncertainty = self.J / alpha0
+        probs = self(obs_data)
 
         if to_numpy:
-            mean = mean.numpy()
-            var = var.numpy()
-            uncertainty = uncertainty.numpy()
+            probs = probs.numpy()
 
-        return {'m_probs': mean, 'm_var': var, 'uncertainty': uncertainty}
-    
-
-    def sample(self, obs_data, n_samples, to_numpy=True):
-        """Samples posterior model probabilities from the second-order Dirichlet distro.
-
-        Parameters
-        ----------
-        obs_data  : tf.Tensor
-            The summary of the observed (or simulated) data, shape (n_datasets, summary_dim)
-        n_samples : int
-            Number of samples to obtain from the approximate posterior
-        to_numpy  : bool, default: True
-            Flag indicating whether to return the samples as a np.array or a tf.Tensor
-
-        Returns
-        -------
-        pm_samples : tf.Tensor or np.array
-            The posterior samples from the Dirichlet distribution, shape (n_samples, n_batch, n_models)
-        """
-
-        # Compute evidential values
-        alpha = self(obs_data)
-        n_datasets = alpha.shape[0]
-
-        # Sample for each dataset
-        pm_samples = np.stack([np.random.dirichlet(alpha[n, :], size=n_samples) for n in range(n_datasets)], axis=1)
-
-        # Convert to tensor, if specified
-        if not to_numpy:
-             pm_samples = tf.convert_to_tensor(pm_samples, dtype=tf.float32)
-        return pm_samples
-
-
-class MCDropout(tf.keras.Model):
-    """Implements Monte Carlo Dropout as a Bayesian approximation according to [1].
-
-    Perhaps not the best approximation, but arguably the cheapest one out there!
-
-    [1] Gal, Y., & Ghahramani, Z. (2016, June). Dropout as a bayesian approximation: 
-    Representing model uncertainty in deep learning. 
-    In international conference on machine learning (pp. 1050-1059). PMLR.
-    """
-
-    def __init__(self, dropout_prob=0.1, **kwargs):
-        """Creates a custom instance of an MC Dropout layer. Will be used both
-        during training and inference.
-        
-        Parameters
-        ----------
-        dropout_prob  : float, optional, default: 0.1
-            The dropout rate to be passed to ``tf.nn.experimental.stateless_dropout()``.
-            
-        """
-        super().__init__(**kwargs)
-        self.drop = tf.keras.layers.Dropout(dropout_prob)
-
-    def call(self, inputs):
-        """Randomly sets elements of ``inputs`` to zero.
-
-        Parameters
-        ----------
-        inputs : tf.Tensor
-            Input of shape (batch_size, ...)
-        
-        Returns
-        -------
-        out    : tf.Tensor
-            Output of shape (batch_size, ...), same as ``inputs``.
-
-        """
-
-        out = self.drop(inputs, training=True)
-        return out
+        return {'m_probs': probs}

@@ -132,11 +132,11 @@ def plot_bootstrap_mae(m_true, m_pred, n_bootstrap, ax):
                         size=12)
     
 
-def perf_tester(evidence_net, summary_net, val_data, n_bootstrap=100, n_cal_bins=15, pub_style=False, save=False):
+def perf_tester(probability_net, summary_net, val_data, n_bootstrap=100, n_cal_bins=15, pub_style=False, save=False):
     """Helper function to test the performance of the model."""
     
     # Compute model predictions in chunks so GPU memory does not blow-up
-    m_soft = tf.concat([evidence_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(val_data['X'], 20)], axis=0).numpy()
+    m_soft = tf.concat([probability_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(val_data['X'], 20)], axis=0).numpy()
     m_hard = (m_soft > 0.5).astype(np.int32)
     m_true = val_data['m'][:, 1]
     
@@ -244,36 +244,36 @@ def plot_calibration_curve_uncertainty(m_true, pm_samples_model, narrow_ci, wide
     sns.despine(ax=ax)
 
 
-    def plot_calibration_curve_repetition_uncertainty(m_true, m_soft, narrow_ci, wide_ci, n_bins, ax, 
-                                       xlabel=True, ylabel=True, title=None, show_ece=True, show_legend=True):
-        """ Plots a calibration curve for a single model with repetition uncertainty (median line and two credible intervals).
-            Caution: Can throw a ValueError if one of the samples produces an empty bin (i.e. less than 15 bins) -> repeat.
+def plot_calibration_curve_repetition_uncertainty(m_true, m_soft, narrow_ci, wide_ci, n_bins, ax, 
+                                    xlabel=True, ylabel=True, title=None, show_ece=True, show_legend=True):
+    """ Plots a calibration curve for a single model with repetition uncertainty (median line and two credible intervals).
+        Caution: Can throw a ValueError if one of the samples produces an empty bin (i.e. less than 15 bins) -> repeat.
 
-        Parameters
-        ----------
-        m_true : np.array
-                One-dimensional array that indicates whether the model is true or not. 
-        pm_samples_model : np.array
-                Two-dimensional array containing the posterior samples of the model's probability for each data set.
-        narrow_ci : list
-                The quantiles of the narrow credible interval.
-        wide_ci : list
-                The quantiles of the wide credible interval.
-        n_bins : int
-                Number of calibration bins.
-        ax : matplotlib Axes
-                Matplot axes object specifying the plot that should be used.
-        xlabel : boolean
-                Controls if the x-axis label is shown.
-        ylabel : boolean
-                Controls if the y-axis label is shown.
-        title : str
-                An optional title that can be provided.
-        show_ece : boolean
-                Controls if the Expected Calibration Error is shown.
-        show_legend : boolean
-                Controls if a legend is shown.
-        """
+    Parameters
+    ----------
+    m_true : np.array
+            One-dimensional array that indicates whether the model is true or not. 
+    pm_samples_model : np.array
+            Two-dimensional array containing the posterior samples of the model's probability for each data set.
+    narrow_ci : list
+            The quantiles of the narrow credible interval.
+    wide_ci : list
+            The quantiles of the wide credible interval.
+    n_bins : int
+            Number of calibration bins.
+    ax : matplotlib Axes
+            Matplot axes object specifying the plot that should be used.
+    xlabel : boolean
+            Controls if the x-axis label is shown.
+    ylabel : boolean
+            Controls if the y-axis label is shown.
+    title : str
+            An optional title that can be provided.
+    show_ece : boolean
+            Controls if the Expected Calibration Error is shown.
+    show_legend : boolean
+            Controls if a legend is shown.
+    """
 
     n_repetitions = m_true.shape[0]
 
@@ -382,14 +382,14 @@ def plot_eces_over_obs(m_true, m_pred, n_obs_min, n_obs_max, n_bins, pub_style, 
         f.savefig('calibration_variable_observations.png', dpi=300, bbox_inches='tight')
 
     
-def perf_tester_over_obs(evidence_net, summary_net, val_data, n_obs_min, n_obs_max, n_cal_bins=15, pub_style=False, save=False):
+def perf_tester_over_obs(probability_net, summary_net, val_data, n_obs_min, n_obs_max, n_cal_bins=15, pub_style=False, save=False):
     """Utility function to test the performance of the model."""
     
     # Compute model predictions in chunks so GPU memory does not blow-up
     m_soft, m_hard, m_true = ([] for i in range(3))
     
     for i in range(n_obs_max-(n_obs_min-1)):
-        m_soft_i = tf.concat([evidence_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(val_data['X'][i], 5)], axis=0).numpy()
+        m_soft_i = tf.concat([probability_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(val_data['X'][i], 5)], axis=0).numpy()
         m_soft.append(m_soft_i)
         m_hard_i = (m_soft[i] > 0.5).astype(np.int32)
         m_hard.append(m_hard_i)
@@ -403,7 +403,7 @@ def perf_tester_over_obs(evidence_net, summary_net, val_data, n_obs_min, n_obs_m
 
 # Calibration: Plotting for training with variable numbers of clusters and variable number of observations
 
-def compute_eces_variable(evidence_net, summary_net, simulator, n_val_per_setting, n_clust_min, n_clust_max, 
+def compute_eces_variable(probability_net, summary_net, simulator, n_val_per_setting, n_clust_min, n_clust_max, 
                           n_obs_min, n_obs_max, n_cal_bins=15, add_accuracy=False):
     """
     Simulates validation data per setting and computes the expected calibration error of the model.
@@ -440,7 +440,7 @@ def compute_eces_variable(evidence_net, summary_net, simulator, n_val_per_settin
                     m_val_sim, _, x_val_sim = simulator(n_val_per_setting, n_clust_obs_f_v_val(l, n))
 
                     # Predict model probabilities
-                    m_soft = tf.concat([evidence_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(x_val_sim, 20)], axis=0).numpy()      
+                    m_soft = tf.concat([probability_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(x_val_sim, 20)], axis=0).numpy()      
                     m_hard = (m_soft > 0.5).astype(np.int32)
                     m_true = m_val_sim[:, 1]  
 
@@ -588,14 +588,18 @@ def plot_approximations(bridge_sampling_results, NN_results, approximated_outcom
 
 # Bridge sampling comparison: Plot computation times
 
-def plot_computation_times(bridge_time, NN_fixed_time, NN_variable_time, save=False):
+def plot_computation_times(results_time_list, names, save=False):
     """ Plots computation times for bridge sampling and the neural networks."""
 
     f, ax = plt.subplots(1, 1, figsize=plotting_settings['figsize'])
 
-    ax.plot(bridge_time, label='Bridge sampling', lw=2, color=plotting_settings['colors_discrete'][0])
-    ax.plot(NN_fixed_time, label='Fixed network', lw=2, linestyle='dotted', color=plotting_settings['colors_discrete'][1])
-    ax.plot(NN_variable_time, label='Variable network', lw=2, linestyle='dashed', color=plotting_settings['colors_discrete'][2])
+    linestyles=[None, 'dotted', 'dashed']
+
+    for i, result in enumerate(results_time_list):
+        ax.plot(results_time_list[i], label=names[i], 
+                lw=2, linestyle=linestyles[i], 
+                color=plotting_settings['colors_discrete'][i]
+                )
     
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
@@ -697,7 +701,7 @@ def plot_noise_robustness(noise_proportions, mean_probs, mean_variabilities, lab
     mean_noise_proportion_list : list
         Mean noise proportions in the data sets for each noise step. 
     mean_probs : np.array
-        Mean predictions output by the evidential network for each noise step.
+        Mean predictions output by the model probability network for each noise step.
     mean_variabilities : np.array
         Standard deviations of the mean predictions over the runs for each noise step.
     labels : list

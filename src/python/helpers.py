@@ -59,7 +59,8 @@ def n_clust_obs_v_v(n_clust_min, n_clust_max, n_obs_min, n_obs_max):
 
 # Calibration: Get multiple predictions to plot with uncertainty.
 
-def get_multiple_predictions(evidence_net, summary_net, simulator, n_models, procedure, output_softmax=False, n_repetitions=10, n_bootstrap=100):
+# TODO: Adjust to arbitrary amount of models (currently only works with 2)
+def get_multiple_predictions(probability_net, summary_net, simulator, n_models, procedure, output_softmax=False, n_repetitions=10, n_bootstrap=100):
     """ Gets multiple predictions from the trained hierarchical network, either via repeated simulation and prediction 
     or the bootstrapping of the predictions on a single batch of simulated data sets.
     """
@@ -75,7 +76,7 @@ def get_multiple_predictions(evidence_net, summary_net, simulator, n_models, pro
         for i in range(n_repetitions):
             m_val, _, x_val = simulator()
 
-            m_soft[i,:] = tf.concat([evidence_net.predict(summary_net(x_chunk), output_softmax)['m_probs'][:, 1] for x_chunk in tf.split(x_val, 20)], axis=0).numpy()
+            m_soft[i,:] = tf.concat([probability_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(x_val, 20)], axis=0).numpy()
             m_true[i] = m_val[:, 1]
 
     if procedure == 'bootstrap':
@@ -85,7 +86,7 @@ def get_multiple_predictions(evidence_net, summary_net, simulator, n_models, pro
 
         for i in range(n_bootstrap):
             b_idx = np.random.choice(np.arange(n_data_sets), size=n_data_sets, replace=True)
-            m_soft[i,:] = tf.concat([evidence_net.predict(summary_net(x_chunk), output_softmax)['m_probs'][:, 1] for x_chunk in tf.split(x_val[b_idx], 20)], axis=0).numpy()
+            m_soft[i,:] = tf.concat([probability_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(x_val[b_idx], 20)], axis=0).numpy()
             m_true[i] = m_val[b_idx][:, 1]
 
     return m_true, m_soft
@@ -93,7 +94,7 @@ def get_multiple_predictions(evidence_net, summary_net, simulator, n_models, pro
 
 # Bridge sampling comparison: data transformations
 
-def get_preds_and_bfs(evidence_net, summary_net, data, training_time_start, training_time_stop, losses):
+def get_preds_and_bfs(probability_net, summary_net, data, training_time_start, training_time_stop, losses):
     """ 
     Writes model predictions and resulting Bayes Factors for a given 
     array of datasets into a pandas DataFrame. 
@@ -105,7 +106,7 @@ def get_preds_and_bfs(evidence_net, summary_net, data, training_time_start, trai
 
     # Predict
     inference_time_start = perf_counter()
-    m1_prob = np.array(evidence_net.predict(summary_net(data['X']))['m_probs'][:, 1], dtype = np.longdouble)
+    m1_prob = np.array(probability_net.predict(summary_net(data['X']))['m_probs'][:, 1], dtype = np.longdouble)
     inference_time_stop = perf_counter()
     m0_prob = 1 - m1_prob
     selected_model = (m1_prob > 0.5)
@@ -150,32 +151,32 @@ def log_with_inf_noise_addition(x):
     return x_copy
 
 
-def computation_times(bridge_sampling_results, NN_fixed_results, NN_variable_results):
-    """Calculates the computation times of bridge sampling and the two neural network variants.
+def computation_times(results_list):
+    """
+    Calculates the computation times of bridge sampling and a number of neural network variants.
+    Assumes that the first result in results_list belongs to bridge sampling and the rest to the neural network(s).
 
     Parameters
     ----------
-    bridge_sampling_results : pd.DataFrame
-        Bridge sampling approximations
-    NN_fixed_results : pd.DataFrame
-        Neural network (trained on fixed sample sizes) approximations
-    NN_variable_results : pd.DataFrame
-        Neural network (trained on varying sample sizes) approximations
+    results_list : list of pd.DataFrame objects
+        Contains the results of bridge sampling and a number of neural network variants
     """
 
     # Calculate computation times
-    bridge_time = (bridge_sampling_results['compile_time'] + 
-                        (bridge_sampling_results['stan_time'] + bridge_sampling_results['bridge_time']).cumsum()
+    results_time_list = []
+    bridge_time = (results_list[0]['compile_time'] + 
+                        (results_list[0]['stan_time'] + results_list[0]['bridge_time']).cumsum()
                         )/60
-    NN_fixed_time = (NN_fixed_results['training_time'] + NN_fixed_results['inference_time'].cumsum())/60
-    NN_variable_time = (NN_variable_results['training_time'] + NN_variable_results['inference_time'].cumsum())/60
+    results_time_list.append(bridge_time)
+
+    for NN_result in results_list[1:]:
+        results_time_list.append((NN_result['training_time'] + NN_result['inference_time'].cumsum())/60)
 
     # Adjust index to represent datasets
-    bridge_time.index = bridge_time.index+1
-    NN_fixed_time.index = NN_fixed_time.index+1
-    NN_variable_time.index = NN_variable_time.index+1
+    for i, result in enumerate(results_time_list):
+        results_time_list[i].index += 1 
 
-    return bridge_time, NN_fixed_time, NN_variable_time
+    return results_time_list
 
 
 
@@ -339,15 +340,15 @@ def join_and_fill_missings(color_data, lexical_data, n_trials, missings_value=-1
 
 # Lévy flight application: Robustness against additional noise
 
-def mean_predictions_noisy_data(empirical_data, evidence_net, summary_net, missings_mean, n_runs):
+def mean_predictions_noisy_data(empirical_data, probability_net, summary_net, missings_mean, n_runs):
     """ Get mean predictions for repeatedly applying the network to data with a proportion randomly masked as missing.
 
     Parameters
     ----------
     empirical_data : np.array
         4-dimensional array with shape (n_datasets, n_clusters, n_obs, n_variables).
-    evidence_net : EvidentialNetwork
-        Trained evidential network.
+    probability_net : ModelProbabilityNetwork
+        Trained model probability network.
     summary_net : HierarchicalInvariantNetwork
         Trained summary network.
     missings_mean : float
@@ -362,11 +363,11 @@ def mean_predictions_noisy_data(empirical_data, evidence_net, summary_net, missi
     mean_noise_proportion : float
         Mean proportion of missing trials in the data.
     mean_probs : np.array
-        Mean predictions output by the evidential network.
+        Mean predictions output by the model probability network.
     mean_probs_sds : np.array
         Standard deviations of the mean predictions over the runs.
     mean_vars : np.array
-        Mean variability output by the evidential network.
+        Mean variability output by the model probability network.
     """
 
     noise_proportion = []
@@ -380,7 +381,7 @@ def mean_predictions_noisy_data(empirical_data, evidence_net, summary_net, missi
         noisy_data = mask_inputs(empirical_data, missings_mean=missings_mean, missings_sd=0.0001, missing_rts_equal_mean=True, insert_additional_missings=True)
         noise_proportion_run = (noisy_data == -1).sum()/(n_clusters*n_obs)
         noise_proportion.append(noise_proportion_run)
-        preds = evidence_net.predict(summary_net(noisy_data))
+        preds = probability_net.predict(summary_net(noisy_data))
         probs.append(preds['m_probs'])
         vars.append(preds['m_var'])
     
@@ -392,7 +393,7 @@ def mean_predictions_noisy_data(empirical_data, evidence_net, summary_net, missi
     return mean_noise_proportion, mean_probs, mean_probs_sds, mean_vars
 
 
-def inspect_robustness_noise(added_noise_percentages, empirical_data, evidence_net, summary_net, n_runs):
+def inspect_robustness_noise(added_noise_percentages, empirical_data, probability_net, summary_net, n_runs):
     """ Utility function to inspect the robustness of the network to artificially added noise.
 
     Parameters
@@ -401,8 +402,8 @@ def inspect_robustness_noise(added_noise_percentages, empirical_data, evidence_n
         Array of noise percentage steps.
     empirical_data : np.array
         4-dimensional array with shape (n_datasets, n_clusters, n_obs, n_variables).
-    evidence_net : EvidentialNetwork
-        Trained evidential network.
+    probability_net : ModelProbabilityNetwork
+        Trained model probability network.
     summary_net : HierarchicalInvariantNetwork
         Trained summary network.
     n_runs : int
@@ -414,11 +415,11 @@ def inspect_robustness_noise(added_noise_percentages, empirical_data, evidence_n
         Mean noise proportions in the data sets for each noise step. 
         Can deviate from added_noise_percentages as added noise can overlap with existing missings.
     mean_probs : np.array
-        Mean predictions output by the evidential network for each noise step.
+        Mean predictions output by the model probability network for each noise step.
     mean_sds : np.array
         Standard deviations of the mean predictions over the runs for each noise step.
     mean_vars : np.array
-        Mean variability output by the evidential network for each noise step.
+        Mean variability output by the model probability network for each noise step.
     """
     
     mean_noise_proportion_list = []
@@ -428,7 +429,7 @@ def inspect_robustness_noise(added_noise_percentages, empirical_data, evidence_n
 
     for noise in added_noise_percentages:
         missings_mean = 900*noise
-        mean_noise_proportion, mean_probs, mean_probs_sds, mean_vars = mean_predictions_noisy_data(empirical_data, evidence_net, summary_net, 
+        mean_noise_proportion, mean_probs, mean_probs_sds, mean_vars = mean_predictions_noisy_data(empirical_data, probability_net, summary_net, 
                                                                                                    missings_mean=missings_mean, n_runs=n_runs)
         mean_noise_proportion_list.append(mean_noise_proportion)
         means_probs_list.append(mean_probs)
@@ -444,15 +445,15 @@ def inspect_robustness_noise(added_noise_percentages, empirical_data, evidence_n
 
 # Lévy flight application: Robustness against bootstrapping
 
-def inspect_robustness_bootstrap(empirical_data, evidence_net, summary_net, level, n_bootstrap=100):
+def inspect_robustness_bootstrap(empirical_data, probability_net, summary_net, level, n_bootstrap=100):
     """ Utility function to inspect the robustness of the network to bootstrapping.
 
     Parameters
     ----------
     empirical_data : np.array
         4-dimensional array with shape (n_datasets, n_clusters, n_obs, n_variables).
-    evidence_net : EvidentialNetwork
-        Trained evidential network.
+    probability_net : ModelProbabilityNetwork
+        Trained model probability network.
     summary_net : HierarchicalInvariantNetwork
         Trained summary network.
     level : string
@@ -463,7 +464,7 @@ def inspect_robustness_bootstrap(empirical_data, evidence_net, summary_net, leve
     Returns
     -------
     bootstrap_probs : np.array
-        Predictions on the bootstrapped data sets output by the evidential network.
+        Predictions on the bootstrapped data sets output by the model probability network.
     """
 
     if level == 'participants':
@@ -479,7 +480,7 @@ def inspect_robustness_bootstrap(empirical_data, evidence_net, summary_net, leve
             bootstrapped_data = empirical_data[:,b_idx,:,:]
         elif level == 'trials':
             bootstrapped_data = empirical_data[:,:,b_idx,:]
-        probs = evidence_net.predict(summary_net(bootstrapped_data))['m_probs']
+        probs = probability_net.predict(summary_net(bootstrapped_data))['m_probs']
         bootstrapped_probs.append(probs)
 
     bootstrapped_probs = np.asarray(bootstrapped_probs)[:,0,:]
@@ -489,15 +490,15 @@ def inspect_robustness_bootstrap(empirical_data, evidence_net, summary_net, leve
 
 # Lévy flight application: Robustness against leaving single participants out (LOPO)
 
-def inspect_robustness_lopo(empirical_data, evidence_net, summary_net, print_probs=False):
+def inspect_robustness_lopo(empirical_data, probability_net, summary_net, print_probs=False):
     """ Utility function to inspect the robustness of the network to leaving single participants out (LOPO).
 
     Parameters
     ----------
     empirical_data : np.array
         4-dimensional array with shape (n_datasets, n_clusters, n_obs, n_variables).
-    evidence_net : EvidentialNetwork
-        Trained evidential network.
+    probability_net : ModelProbabilityNetwork
+        Trained model probability network.
     summary_net : HierarchicalInvariantNetwork
         Trained summary network.
     print : boolean
@@ -506,7 +507,7 @@ def inspect_robustness_lopo(empirical_data, evidence_net, summary_net, print_pro
     Returns
     -------
     lopo_probs : np.array
-        Predictions on the LOPO data sets output by the evidential network.
+        Predictions on the LOPO data sets output by the model probability network.
     """
 
     n_participants = empirical_data.shape[1]
@@ -515,7 +516,7 @@ def inspect_robustness_lopo(empirical_data, evidence_net, summary_net, print_pro
 
     for b in range(n_participants):
         cropped_data = np.delete(empirical_data, b, axis=1)
-        probs = evidence_net.predict(summary_net(cropped_data))['m_probs']
+        probs = probability_net.predict(summary_net(cropped_data))['m_probs']
         lopo_probs.append(probs)
         if print_probs:
             print_probs(f'Participant = {b+1} / Predictions  = {probs}')
