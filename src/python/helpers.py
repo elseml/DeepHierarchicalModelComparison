@@ -58,36 +58,77 @@ def n_clust_obs_v_v(n_clust_min, n_clust_max, n_obs_min, n_obs_max):
 
 
 # Calibration: Get multiple predictions to plot with uncertainty.
+def get_repeated_predictions(probability_net, summary_net, simulator, n_models, n_data_sets=5000, n_repetitions=10):
+    """ Gets repeated predictions from the trained hierarchical network via repeated simulation and prediction. 
+    Recommended for online learning settings with fast data set simulation.
 
-# TODO: Adjust to arbitrary amount of models (currently only works with 2)
-def get_multiple_predictions(probability_net, summary_net, simulator, n_models, procedure, output_softmax=False, n_repetitions=10, n_bootstrap=100):
-    """ Gets multiple predictions from the trained hierarchical network, either via repeated simulation and prediction 
-    or the bootstrapping of the predictions on a single batch of simulated data sets.
+    Parameters
+    ----------
+    probability_net : ModelProbabilityNetwork
+        Trained model probability network.
+    summary_net : HierarchicalInvariantNetwork
+        Trained summary network.
+    simulator : MainSimulator
+        A generative model 
+    n_models : int
+        Number of compared models
+    n_data_sets : int
+        Number of data sets simulated in each repetition.
+    n_repetitions : int
+        Number of times the simulation and prediction loop is repeated.
+
+    Returns
+    -------
+    m_true, m_soft : np.arrays of shape (n_repetitions, n_data_sets, n_models)
+        True model indices and corresponding predictions for each model.
     """
 
-    m_val, _, x_val = simulator()
-    n_data_sets = m_val.shape[0]
+    m_soft = np.zeros((n_repetitions, n_data_sets, n_models))
+    m_true = np.zeros((n_repetitions, n_data_sets, n_models))
 
-    if procedure == 'repeated':
-        
-        m_soft = np.zeros((n_repetitions, n_data_sets))
-        m_true = np.zeros((n_repetitions, n_data_sets))
+    for i in range(n_repetitions):
+        m_val, _, x_val = simulator()
 
-        for i in range(n_repetitions):
-            m_val, _, x_val = simulator()
+        m_soft[i,:,:] = tf.concat([probability_net.predict(summary_net(x_chunk))['m_probs'] for x_chunk in tf.split(x_val, 20)], axis=0)
+        m_true[i,:,:] = m_val
 
-            m_soft[i,:] = tf.concat([probability_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(x_val, 20)], axis=0).numpy()
-            m_true[i] = m_val[:, 1]
+    return m_true, m_soft
 
-    if procedure == 'bootstrap':
 
-        m_soft = np.zeros((n_bootstrap, n_data_sets))
-        m_true = np.zeros((n_bootstrap, n_data_sets))
+def get_bootstrapped_predictions(probability_net, summary_net, simulated_data, simulated_indices, n_models, n_bootstrap=100):
+    """ Gets bootstrapped predictions from the trained hierarchical network via bootstrapping of the given batch of data sets. 
+    Recommended for offline learning settings or online learning settings with slow data set simulation.
 
-        for i in range(n_bootstrap):
-            b_idx = np.random.choice(np.arange(n_data_sets), size=n_data_sets, replace=True)
-            m_soft[i,:] = tf.concat([probability_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(x_val[b_idx], 20)], axis=0).numpy()
-            m_true[i] = m_val[b_idx][:, 1]
+    Parameters
+    ----------
+    probability_net : ModelProbabilityNetwork
+        Trained model probability network.
+    summary_net : HierarchicalInvariantNetwork
+        Trained summary network.
+    simulated_data : np.array
+        A batch of simulated data sets 
+    simulated_indices : np.array
+        A batch of simulated indices marking which model each data set in simulated_data was generated from.
+    n_models : int
+        Number of compared models
+    n_bootstrap : int
+        Number of bootstrap samples from to simulated_data.
+
+    Returns
+    -------
+    m_true, m_soft : np.arrays of shape (n_repetitions, n_data_sets, n_models)
+        True model indices and corresponding predictions for each model.
+    """
+
+    n_data_sets = simulated_indices.shape[0]
+
+    m_soft = np.zeros((n_bootstrap, n_data_sets, n_models))
+    m_true = np.zeros((n_bootstrap, n_data_sets, n_models))
+
+    for i in range(n_bootstrap):
+        b_idx = np.random.choice(np.arange(n_data_sets), size=n_data_sets, replace=True)
+        m_soft[i,:,:] = tf.concat([probability_net.predict(summary_net(x_chunk))['m_probs'] for x_chunk in tf.split(simulated_data[b_idx], 20)], axis=0)
+        m_true[i,:,:] = simulated_indices[b_idx]
 
     return m_true, m_soft
 
@@ -341,7 +382,8 @@ def join_and_fill_missings(color_data, lexical_data, n_trials, missings_value=-1
 # Lévy flight application: Robustness against additional noise
 
 def mean_predictions_noisy_data(empirical_data, probability_net, summary_net, missings_mean, n_runs):
-    """ Get mean predictions for repeatedly applying the network to data with a proportion randomly masked as missing.
+    """ Get mean predictions for repeatedly applying the network to nested data with a proportion randomly masked as missing.
+        Variation of missing value between persons is held minimal via a low missings_sd parameter inside the runs loop.
 
     Parameters
     ----------
@@ -372,7 +414,6 @@ def mean_predictions_noisy_data(empirical_data, probability_net, summary_net, mi
 
     noise_proportion = []
     probs = []
-    vars = []
 
     n_clusters = empirical_data.shape[1]
     n_obs = empirical_data.shape[2]
@@ -383,14 +424,12 @@ def mean_predictions_noisy_data(empirical_data, probability_net, summary_net, mi
         noise_proportion.append(noise_proportion_run)
         preds = probability_net.predict(summary_net(noisy_data))
         probs.append(preds['m_probs'])
-        vars.append(preds['m_var'])
     
     mean_noise_proportion = np.mean(noise_proportion)
     mean_probs = np.mean(probs, axis=0)
     mean_probs_sds = np.std(probs, axis=0)
-    mean_vars = np.mean(vars, axis=0)
     
-    return mean_noise_proportion, mean_probs, mean_probs_sds, mean_vars
+    return mean_noise_proportion, mean_probs, mean_probs_sds
 
 
 def inspect_robustness_noise(added_noise_percentages, empirical_data, probability_net, summary_net, n_runs):
@@ -418,29 +457,24 @@ def inspect_robustness_noise(added_noise_percentages, empirical_data, probabilit
         Mean predictions output by the model probability network for each noise step.
     mean_sds : np.array
         Standard deviations of the mean predictions over the runs for each noise step.
-    mean_vars : np.array
-        Mean variability output by the model probability network for each noise step.
     """
     
     mean_noise_proportion_list = []
     means_probs_list = []
     means_probs_sds_list = []
-    mean_vars_list = []
 
     for noise in added_noise_percentages:
         missings_mean = 900*noise
-        mean_noise_proportion, mean_probs, mean_probs_sds, mean_vars = mean_predictions_noisy_data(empirical_data, probability_net, summary_net, 
+        mean_noise_proportion, mean_probs, mean_probs_sds = mean_predictions_noisy_data(empirical_data, probability_net, summary_net, 
                                                                                                    missings_mean=missings_mean, n_runs=n_runs)
         mean_noise_proportion_list.append(mean_noise_proportion)
         means_probs_list.append(mean_probs)
         means_probs_sds_list.append(mean_probs_sds)
-        mean_vars_list.append(mean_vars)
 
     mean_probs= np.squeeze(means_probs_list)
     mean_sds = np.squeeze(means_probs_sds_list)
-    mean_vars = np.squeeze(mean_vars_list)
 
-    return mean_noise_proportion_list, mean_probs, mean_sds, mean_vars
+    return mean_noise_proportion_list, mean_probs, mean_sds
 
 
 # Lévy flight application: Robustness against bootstrapping
