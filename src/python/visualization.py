@@ -155,7 +155,7 @@ def perf_tester(probability_net, summary_net, val_data, n_bootstrap=100, n_cal_b
         fig, ax = plt.subplots(figsize=(5,5))
         plot_calibration_curve(m_true, m_soft, n_cal_bins, ax)
         if save == True:
-            fig.savefig('calibration_fixed_sizes.png', dpi=300, bbox_inches='tight')
+            fig.savefig('calibration_fixed_sizes.pdf', dpi=300, bbox_inches='tight')
 
 
 def plot_calibration_curve_uncertainty(m_true, pm_samples_model, narrow_ci, wide_ci, n_bins, ax, 
@@ -217,12 +217,12 @@ def plot_calibration_curve_uncertainty(m_true, pm_samples_model, narrow_ci, wide
     ax.plot(probs_true_median, probs_pred_median, color=plotting_settings['colors_discrete'][0])
 
     # Plot credible intervals
+    ax.fill(np.append(probs_true_wide[0,:], probs_true_wide[1,:][::-1]),
+            np.append(probs_pred_wide[0,:], probs_pred_wide[1,:][::-1]),
+            color=plotting_settings['colors_discrete'][0], alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0])) 
     ax.fill(np.append(probs_true_narrow[0,:], probs_true_narrow[1,:][::-1]),
             np.append(probs_pred_narrow[0,:], probs_pred_narrow[1,:][::-1]),
             color=plotting_settings['colors_discrete'][0], alpha=0.3, label='{:.0%} CI'.format(narrow_ci[1]-narrow_ci[0]))
-    ax.fill(np.append(probs_true_wide[0,:], probs_true_wide[1,:][::-1]),
-            np.append(probs_pred_wide[0,:], probs_pred_wide[1,:][::-1]),
-            color=plotting_settings['colors_discrete'][0], alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0]))   
 
     # Format plot
     ax.set_xlim([0, 1])
@@ -302,12 +302,12 @@ def plot_calibration_curve_repetition_uncertainty(m_true, m_soft, narrow_ci, wid
     ax.plot(probs_true_median, probs_pred_median, color=plotting_settings['colors_discrete'][0])
 
     # Plot credible intervals
+    ax.fill(np.append(probs_true_wide[0,:], probs_true_wide[1,:][::-1]),
+            np.append(probs_pred_wide[0,:], probs_pred_wide[1,:][::-1]),
+            color=plotting_settings['colors_discrete'][0], alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0])) 
     ax.fill(np.append(probs_true_narrow[0,:], probs_true_narrow[1,:][::-1]),
             np.append(probs_pred_narrow[0,:], probs_pred_narrow[1,:][::-1]),
             color=plotting_settings['colors_discrete'][0], alpha=0.3, label='{:.0%} CI'.format(narrow_ci[1]-narrow_ci[0]))
-    ax.fill(np.append(probs_true_wide[0,:], probs_true_wide[1,:][::-1]),
-            np.append(probs_pred_wide[0,:], probs_pred_wide[1,:][::-1]),
-            color=plotting_settings['colors_discrete'][0], alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0]))   
 
     # Format plot
     ax.set_xlim([0, 1])
@@ -331,7 +331,7 @@ def plot_calibration_curve_repetition_uncertainty(m_true, m_soft, narrow_ci, wid
 
 # Calibration: Plotting for training with fixed numbers of clusters and variable number of observations
 
-def plot_eces_over_obs(m_true, m_pred, n_obs_min, n_obs_max, n_bins, pub_style, save=False):
+def plot_eces_over_obs(m_true, m_pred, n_obs_min, n_obs_max, n_bins, pub_style, show_ece=True, save=False):
     """Helper function to plot ece as a function of N."""
 
     f, ax = plt.subplots(1, 1, figsize=(5, 5))
@@ -371,6 +371,7 @@ def plot_eces_over_obs(m_true, m_pred, n_obs_min, n_obs_max, n_bins, pub_style, 
         plt.axhline(y=mean_ece, linestyle='--', color='darkgrey')
         ax.set_ylim([0, 0.3])
 
+
     ax.set_xlim([n_obs_min, n_obs_max])
     ax.set_xlabel('Number of observations ($N$)')
     ax.set_ylabel('ECE')
@@ -378,8 +379,13 @@ def plot_eces_over_obs(m_true, m_pred, n_obs_min, n_obs_max, n_bins, pub_style, 
     
     print(f'Mean ECE = {mean_ece}')
 
+    if show_ece:
+        ax.text(0.1, 0.9, r'$\widehat{{\mathrm{{ECE}}}} = {0:.3f}$'.format(cal_err),
+                horizontalalignment='left', verticalalignment='center',
+                transform=ax.transAxes, size=12)
+
     if save == True:
-        f.savefig('calibration_variable_observations.png', dpi=300, bbox_inches='tight')
+        f.savefig('calibration_variable_observations.pdf', dpi=300, bbox_inches='tight')
 
     
 def perf_tester_over_obs(probability_net, summary_net, val_data, n_obs_min, n_obs_max, n_cal_bins=15, pub_style=False, save=False):
@@ -425,7 +431,7 @@ def compute_eces_variable(probability_net, summary_net, simulator, n_val_per_set
         return (K, N)
     
     # Create lists
-    ece_means = []
+    eces = []
     if add_accuracy:
         accuracies = []
     
@@ -446,10 +452,8 @@ def compute_eces_variable(probability_net, summary_net, simulator, n_val_per_set
 
                     # Compute calibration error
                     prob_true, prob_pred = calibration_curve(m_true, m_soft, n_bins=n_cal_bins)
-                    cal_err = np.abs(prob_true - prob_pred)
-
-                    mean_ece = np.mean(cal_err)
-                    ece_means.append(mean_ece)
+                    cal_err = np.mean(np.abs(prob_true - prob_pred))
+                    eces.append(cal_err)
 
                     if add_accuracy:
                         accuracy = accuracy_score(m_true, m_hard)
@@ -465,12 +469,12 @@ def compute_eces_variable(probability_net, summary_net, simulator, n_val_per_set
                 p_bar.update()
     
     if add_accuracy:
-        return ece_means, accuracies
+        return eces, accuracies
 
-    return ece_means
+    return eces
 
 
-def plot_eces_variable(ece_means, n_clust_min, n_clust_max, n_obs_min, n_obs_max, save=False, zlims=[0, 0.3], zlabel='ECE'):
+def plot_eces_variable(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max, save=False, zlims=[0, 0.3], zlabel='ECE'):
     """ 
     Takes the ECE results from compute_eces_variable() and 
     projects them onto a 3D-plot.
@@ -484,7 +488,7 @@ def plot_eces_variable(ece_means, n_clust_min, n_clust_max, n_obs_min, n_obs_max
     n_obs_points = np.arange(n_obs_min, n_obs_max+1)
 
     n_clust_grid, n_obs_grid = np.meshgrid(n_clust_points, n_obs_points)
-    cal_err_grid = np.reshape(ece_means, (-1, n_clust_max)) # reshape into (#clusters, #observations)
+    cal_err_grid = np.reshape(eces, (-1, n_clust_max)) # reshape into (#clusters, #observations)
     ax.plot_surface(n_clust_grid, n_obs_grid, cal_err_grid, cmap='viridis', edgecolor='none')
 
     ax.elev = 15
@@ -496,17 +500,17 @@ def plot_eces_variable(ece_means, n_clust_min, n_clust_max, n_obs_min, n_obs_max
     ax.set_ylabel('Number of observations ($N$)', rotation=35) # not parallel to axis with automatic rotation    
     ax.set_zlabel(zlabel)
 
-    print(f'Mean ECE = {np.mean(ece_means)}')
-    #ax.text2D(0.05, 0.95, 'Mean ECE = {0:.3f}'.format(np.mean(ece_means)), transform=ax.transAxes)
-    #ax.text2D(0.05, 0.90, 'SD around mean ECE = {0:.3f}'.format(np.std(ece_means)), transform=ax.transAxes)
+    print(f'Mean ECE = {np.mean(eces)}')
+    #ax.text2D(0.05, 0.95, 'Mean ECE = {0:.3f}'.format(np.mean(eces)), transform=ax.transAxes)
+    #ax.text2D(0.05, 0.90, 'SD around mean ECE = {0:.3f}'.format(np.std(eces)), transform=ax.transAxes)
     #ax.set_title('Expected Calibration Error (ECE)')
 
     if save == True:
-        f.savefig('calibration_variable_sizes.png', dpi=300, bbox_inches='tight')
+        f.savefig('calibration_variable_sizes.pdf', dpi=300, bbox_inches='tight')
     
 
-def plot_ece_means(ece_means, n_clust_min, n_clust_max, n_obs_min, n_obs_max, x_axis):
-    """Helper function to plot ece means over clusters (1 = inspect observations) or observations (0 = inspect clusters)."""
+def plot_eces_marginalized(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max, x_axis):
+    """Helper function to plot eces over clusters (1 = inspect observations) or observations (0 = inspect clusters)."""
 
     if x_axis == 0:
         xlabel='$M$'
@@ -519,17 +523,17 @@ def plot_ece_means(ece_means, n_clust_min, n_clust_max, n_obs_min, n_obs_max, x_
         n_min, n_max = n_obs_min, n_obs_max
 
     # Average marginalized dimension
-    ece_means_reshaped = np.reshape(ece_means, (-1, n_clust_max)) # reshape into (#clusters, #observations)
-    ece_means_marginalized = np.mean(ece_means_reshaped, axis = axis)
-    print(ece_means_marginalized[:5]) # inspect ECEs for small number of clusters/observations
+    eces_reshaped = np.reshape(eces, (-1, n_clust_max)) # reshape into (#clusters, #observations)
+    eces_marginalized = np.mean(eces_reshaped, axis = axis)
+    print(eces_marginalized[:5]) # inspect ECEs for small number of clusters/observations
 
     f, ax = plt.subplots(1, 1, figsize=(10, 10))
     
     n_points = np.arange(n_min, n_max+1)
     
-    ax.plot(n_points, ece_means_marginalized, color='black')
-    grand_mean_ece = np.mean(ece_means_marginalized)
-    plt.axhline(y=grand_mean_ece, linestyle='--', color='darkgrey')
+    ax.plot(n_points, eces_marginalized, color='black')
+    mean_ece = np.mean(eces_marginalized)
+    plt.axhline(y=mean_ece, linestyle='--', color='darkgrey')
     ax.set_xlim([n_min, n_max])
     ax.set_ylim([0, 0.4])
     ax.set_xlabel(xlabel)
@@ -539,7 +543,7 @@ def plot_ece_means(ece_means, n_clust_min, n_clust_max, n_obs_min, n_obs_max, x_
 
 # Bridge sampling comparison: Plot approximations
 
-def plot_approximations(bridge_sampling_results, NN_results, approximated_outcome, NN_name, save=False, ax=None):
+def plot_approximations(bridge_sampling_results, NN_results, approximated_outcome, NN_name, model_names, save=False, ax=None):
     """Plots and contrasts the approximations generated by bridge sampling and a neural network.
 
     Parameters
@@ -560,18 +564,20 @@ def plot_approximations(bridge_sampling_results, NN_results, approximated_outcom
     if approximated_outcome == 'PMPs': # PMPs
         bridge_data = bridge_sampling_results['m1_prob']
         NN_data = NN_results['m1_prob']
-        label_outcome = r'$p(\mathcal{M}_2\,|\,\it{x})$'
+        label_outcome = r'$p(' + f'{model_names[1]}' + r'\,|\,\it{x})$'
         
     elif approximated_outcome == 'Log BFs': # Log BFs
         bridge_data = log_with_inf_noise_addition(bridge_sampling_results)
         NN_data = log_with_inf_noise_addition(NN_results)
-        label_outcome = r'$\log \/ \mathrm{BF}_{21}$' #'$Log\/BF_{21}$'
+        label_outcome = r'$\ln (\mathrm{BF}_{21})$' 
 
     colors = {0:plotting_settings['colors_discrete'][3], 1:plotting_settings['colors_discrete'][0]}
 
     ax.scatter(bridge_data, NN_data, c=bridge_sampling_results['true_model'].map(colors), alpha=.8)
     helperlist = [plt.plot([], marker="o", ls="", color=color, alpha=.8)[0] for color in colors.values()] # hack for legend
-    ax.legend(helperlist, [r'Simulated from $\mathcal{M}_1$', 'Simulated from $\mathcal{M}_2$'], loc='upper left', fontsize=12)
+    legend_test = [r'Simulated from ' + f'${model_names[0]}$', 
+                   r'Simulated from ' + f'${model_names[1]}$']
+    ax.legend(helperlist, legend_test, loc='upper left', fontsize=12)
     ax.plot(ax.get_xlim(), ax.get_xlim(), '--', color='darkgrey')
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
@@ -581,19 +587,20 @@ def plot_approximations(bridge_sampling_results, NN_results, approximated_outcom
     
     if save == True:
         if approximated_outcome == 'PMPs': 
-            plt.savefig('BS_vs_NN_PMPs_.png', dpi=300, bbox_inches='tight')
+            plt.savefig('BS_vs_NN_PMPs_.pdf', dpi=300, bbox_inches='tight')
         if approximated_outcome == 'Log BFs': 
-            plt.savefig('BS_vs_NN_BFs_.png', dpi=300, bbox_inches='tight')
+            plt.savefig('BS_vs_NN_BFs_.pdf', dpi=300, bbox_inches='tight')
 
 
 # Bridge sampling comparison: Plot computation times
 
-def plot_computation_times(results_time_list, names, save=False):
+def plot_computation_times(results_time_list, names, save=False, ax=None):
     """ Plots computation times for bridge sampling and the neural networks."""
 
-    f, ax = plt.subplots(1, 1, figsize=plotting_settings['figsize'])
+    if not ax:
+        f, ax = plt.subplots(1, 1, figsize=plotting_settings['figsize'])
 
-    linestyles=[None, 'dotted', 'dashed']
+    linestyles=[None, 'dashed', 'dotted']
 
     for i, result in enumerate(results_time_list):
         ax.plot(results_time_list[i], label=names[i], 
@@ -605,7 +612,7 @@ def plot_computation_times(results_time_list, names, save=False):
     ax.spines['top'].set_visible(False)
     ax.set_xlabel('Data set', fontsize=plotting_settings['fontsize_labels']) # add (cumulative)? 
     ax.set_ylabel('Computation time in minutes', fontsize=plotting_settings['fontsize_labels'])
-    ax.set_xlim(xmin=1)
+    ax.set_xlim(xmin=1, xmax=len(results_time_list[0]))
     ax.set_ylim(ymin=0)
     ax.legend(loc='upper left', fontsize=12)
 
@@ -617,7 +624,7 @@ def plot_computation_times(results_time_list, names, save=False):
     ax.grid(which='both', alpha=.3)
 
     if save:
-        plt.savefig('bs_comparison_comp_times.png', dpi=300, bbox_inches='tight')
+        plt.savefig('bs_comparison_comp_times.pdf', dpi=300, bbox_inches='tight')
 
 
 
@@ -652,7 +659,7 @@ def plot_validation_results(true_models, preds, pm_samples, narrow_ci, wide_ci, 
                                            ylabel=ylabels[m], title=labels[m], show_legend=False)
     
     if save:
-        fig.savefig('levy_validation.png', dpi=300, bbox_inches='tight')
+        fig.savefig('levy_validation.pdf', dpi=300, bbox_inches='tight')
 
 
 # Lévy flight application: Visualize PMPs
@@ -688,7 +695,7 @@ def plot_model_posteriors(dirichlet_samples, labels, title=None, save=False, ax=
         ax.set_title(title, fontsize=plotting_settings['fontsize_title'])
 
     if save:
-        plt.savefig('levy_model_posteriors.png', dpi=300, bbox_inches='tight')
+        plt.savefig('levy_model_posteriors.pdf', dpi=300, bbox_inches='tight')
 
 
 # Lévy flight application: Robustness against additional noise
@@ -731,8 +738,8 @@ def plot_noise_robustness(noise_proportions, mean_probs, mean_variabilities, lab
                     
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
-    ax.set_xlabel('Percentage of missing values', fontsize=plotting_settings['fontsize_labels'])
+    ax.set_xlabel('Percentage of missing data', fontsize=plotting_settings['fontsize_labels'])
     ax.set_ylabel('Posterior model probability', fontsize=plotting_settings['fontsize_labels'])
 
     if save:
-        fig.savefig('levy_noise_robustness.png', dpi=300, bbox_inches='tight')
+        fig.savefig('levy_noise_robustness.pdf', dpi=300, bbox_inches='tight')
