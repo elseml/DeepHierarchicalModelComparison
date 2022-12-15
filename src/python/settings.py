@@ -85,4 +85,5 @@ plotting_settings = {
     'alpha' : 0.8,
     'fontsize_labels' : 14,
     'fontsize_title' : 16,
+    'fontsize_legends' : 12
 }
