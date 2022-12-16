@@ -6,6 +6,8 @@ from scipy.stats import truncnorm
 from tensorflow.keras.utils import to_categorical
 from time import perf_counter
 
+from sklearn.utils import column_or_1d, assert_all_finite, check_consistent_length
+from sklearn.metrics._base import _check_pos_label_consistency
 
 
 # Calibration: Hacks for BayesFlow compatibility. 
@@ -57,7 +59,116 @@ def n_clust_obs_v_v(n_clust_min, n_clust_max, n_obs_min, n_obs_max):
     return (K, N)
 
 
-# Calibration: Get multiple predictions to plot with uncertainty.
+# Calibration
+
+# Get calibration curve and ECE 
+def calibration_curve_with_ece(
+    y_true,
+    y_prob,
+    pos_label=None,
+    n_bins=15,
+    strategy="uniform",
+):
+    """
+    [sklearn.calibration.calibration_curve source code supplemented with an ECE calculation 
+     proposed by chrisyeh96 in issue #18268 of the scikit-learn github repository.]
+    Compute true and predicted probabilities for a calibration curve.
+    The method assumes the inputs come from a binary classifier, and
+    discretize the [0, 1] interval into bins.
+    Calibration curves may also be referred to as reliability diagrams.
+    Computes ECE according to Naeini et al. (2015) with prob_true 
+    and NOT according to Guo et al. (2017) which use accuracy instead.
+
+    Parameters
+    ----------
+    y_true : array-like of shape (n_samples,)
+        True targets.
+    y_prob : array-like of shape (n_samples,)
+        Probabilities of the positive class.
+    pos_label : int or str, default=None
+        The label of the positive class.
+        .. versionadded:: 1.1
+    n_bins : int, default=5
+        Number of bins to discretize the [0, 1] interval. A bigger number
+        requires more data. Bins with no samples (i.e. without
+        corresponding values in `y_prob`) will not be returned, thus the
+        returned arrays may have less than `n_bins` values.
+    strategy : {'uniform', 'quantile'}, default='uniform'
+        Strategy used to define the widths of the bins.
+        uniform
+            The bins have identical widths.
+        quantile
+            The bins have the same number of samples and depend on `y_prob`.
+    Returns
+    -------
+    prob_true : ndarray of shape (n_bins,) or smaller
+        The proportion of samples whose class is the positive class, in each
+        bin (fraction of positives).
+    prob_pred : ndarray of shape (n_bins,) or smaller
+        The mean predicted probability in each bin.
+    ece : float
+        The ECE over all bins.
+    References
+    ----------
+    Alexandru Niculescu-Mizil and Rich Caruana (2005) Predicting Good
+    Probabilities With Supervised Learning, in Proceedings of the 22nd
+    International Conference on Machine Learning (ICML).
+    See section 4 (Qualitative Analysis of Predictions).
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from sklearn.calibration import calibration_curve
+    >>> y_true = np.array([0, 0, 0, 0, 1, 1, 1, 1, 1])
+    >>> y_pred = np.array([0.1, 0.2, 0.3, 0.4, 0.65, 0.7, 0.8, 0.9,  1.])
+    >>> prob_true, prob_pred = calibration_curve(y_true, y_pred, n_bins=3)
+    >>> prob_true
+    array([0. , 0.5, 1. ])
+    >>> prob_pred
+    array([0.2  , 0.525, 0.85 ])
+    """
+    y_true = column_or_1d(y_true)
+    y_prob = column_or_1d(y_prob)
+    check_consistent_length(y_true, y_prob)
+    pos_label = _check_pos_label_consistency(pos_label, y_true)
+
+    if y_prob.min() < 0 or y_prob.max() > 1:
+        raise ValueError("y_prob has values outside [0, 1].")
+
+    labels = np.unique(y_true)
+    if len(labels) > 2:
+        raise ValueError(
+            f"Only binary classification is supported. Provided labels {labels}."
+        )
+    y_true = y_true == pos_label
+
+    if strategy == "quantile":  # Determine bin edges by distribution of data
+        quantiles = np.linspace(0, 1, n_bins + 1)
+        bins = np.percentile(y_prob, quantiles * 100)
+    elif strategy == "uniform":
+        bins = np.linspace(0.0, 1.0, n_bins + 1)
+    else:
+        raise ValueError(
+            "Invalid entry to 'strategy' input. Strategy "
+            "must be either 'quantile' or 'uniform'."
+        )
+
+    binids = np.searchsorted(bins[1:-1], y_prob)
+
+    bin_sums = np.bincount(binids, weights=y_prob, minlength=len(bins))
+    bin_true = np.bincount(binids, weights=y_true, minlength=len(bins))
+    bin_total = np.bincount(binids, minlength=len(bins))
+    
+    nonzero = bin_total != 0
+    prob_true = bin_true[nonzero] / bin_total[nonzero]
+    prob_pred = bin_sums[nonzero] / bin_total[nonzero]
+
+    # Calculate ECE as proposed by chrisyeh96 (https://github.com/scikit-learn/scikit-learn/issues/18268)
+    ece = np.sum(np.abs(prob_true - prob_pred) * (bin_total[nonzero] / len(y_true)))
+
+    return prob_true, prob_pred, ece
+
+
+# Get multiple predictions to plot with uncertainty.
 def get_repeated_predictions(probability_net, summary_net, simulator, n_models, n_data_sets=5000, n_repetitions=10):
     """ Gets repeated predictions from the trained hierarchical network via repeated simulation and prediction. 
     Recommended for online learning settings with fast data set simulation.

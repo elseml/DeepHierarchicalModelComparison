@@ -1,4 +1,4 @@
-from .helpers import log_with_inf_noise_addition
+from .helpers import calibration_curve_with_ece, log_with_inf_noise_addition
 from .settings import plotting_settings
 
 import numpy as np
@@ -54,11 +54,10 @@ def plot_confusion_matrix(m_true, m_pred, model_names, ax, normalize=True,
 def plot_calibration_curve(m_true, m_pred, n_bins, ax, xlabel=True, ylabel=True, title=None, show_ece=True):
     """Helper function to plot the calibration curve and ece."""
     
-    prob_true, prob_pred = calibration_curve(m_true, m_pred, n_bins=n_bins)
-    cal_err = np.mean(np.abs(prob_true - prob_pred))
+    prob_true, prob_pred, cal_err = calibration_curve_with_ece(m_true, m_pred, n_bins=n_bins)
 
     ax.plot((0,1), (0,1), '--', color='darkgrey')
-    ax.plot(prob_true, prob_pred, color=plotting_settings['colors_discrete'][0])
+    ax.plot(prob_pred, prob_true, color=plotting_settings['colors_discrete'][0])
     print('ECE = {0:.3f}'.format(cal_err))
 
     ax.set_xlim([0, 1])
@@ -66,9 +65,9 @@ def plot_calibration_curve(m_true, m_pred, n_bins, ax, xlabel=True, ylabel=True,
     ax.set_xticks([0.2, 0.4, 0.6, 0.8, 1.0])
     ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
     if xlabel:
-        ax.set_xlabel('Accuracy',  fontsize=plotting_settings['fontsize_labels'])
+        ax.set_xlabel('Predicted probability',  fontsize=plotting_settings['fontsize_labels'])
     if ylabel:
-        ax.set_ylabel('Confidence',  fontsize=plotting_settings['fontsize_labels'])
+        ax.set_ylabel('True probability',  fontsize=plotting_settings['fontsize_labels'])
     ax.set_title(title, fontsize=plotting_settings['fontsize_title'])
     ax.grid(alpha=.3)
     if show_ece:
@@ -283,8 +282,7 @@ def plot_calibration_curve_repetition_uncertainty(m_true, m_soft, narrow_ci, wid
     eces =  np.zeros(n_repetitions)
 
     for n in range(n_repetitions):
-        probs_true[n, :], probs_pred[n, :] = calibration_curve(m_true[n, :], m_soft[n, :], n_bins=n_bins)
-        eces[n] = np.mean(np.abs(probs_true - probs_pred))
+        probs_true[n, :], probs_pred[n, :], eces[n] = calibration_curve_with_ece(m_true[n, :], m_soft[n, :], n_bins=n_bins)
     ece_median = np.squeeze(np.quantile(eces, q=[0.5], axis=0))
     print(f'Median ECE = {ece_median}')
 
@@ -302,14 +300,14 @@ def plot_calibration_curve_repetition_uncertainty(m_true, m_soft, narrow_ci, wid
 
     # Plot median curve and diagonal
     ax.plot((0,1), (0,1), '--', color='darkgrey')
-    ax.plot(probs_true_median, probs_pred_median, color=plotting_settings['colors_discrete'][0], label='Median')
+    ax.plot(probs_pred_median, probs_true_median, color=plotting_settings['colors_discrete'][0], label='Median')
 
     # Plot credible intervals
-    ax.fill(np.append(probs_true_narrow[0,:], probs_true_narrow[1,:][::-1]),
-            np.append(probs_pred_narrow[0,:], probs_pred_narrow[1,:][::-1]),
+    ax.fill(np.append(probs_pred_narrow[0,:], probs_pred_narrow[1,:][::-1]),
+            np.append(probs_true_narrow[0,:], probs_true_narrow[1,:][::-1]),
             color=plotting_settings['colors_discrete'][0], alpha=0.3, label='{:.0%} CI'.format(narrow_ci[1]-narrow_ci[0]))
-    ax.fill(np.append(probs_true_wide[0,:], probs_true_wide[1,:][::-1]),
-            np.append(probs_pred_wide[0,:], probs_pred_wide[1,:][::-1]),
+    ax.fill(np.append(probs_pred_wide[0,:], probs_pred_wide[1,:][::-1]),
+            np.append(probs_true_wide[0,:], probs_true_wide[1,:][::-1]),
             color=plotting_settings['colors_discrete'][0], alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0])) 
     
     # Format plot
@@ -318,9 +316,9 @@ def plot_calibration_curve_repetition_uncertainty(m_true, m_soft, narrow_ci, wid
     ax.set_xticks([0.2, 0.4, 0.6, 0.8, 1.0])
     ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
     if xlabel:
-            ax.set_xlabel('Accuracy', fontsize=plotting_settings['fontsize_labels'])
+            ax.set_xlabel('Predicted probability', fontsize=plotting_settings['fontsize_labels'])
     if ylabel:
-            ax.set_ylabel('Confidence', fontsize=plotting_settings['fontsize_labels'])
+            ax.set_ylabel('True probability', fontsize=plotting_settings['fontsize_labels'])
     ax.set_title(title, fontsize=plotting_settings['fontsize_labels'])
     ax.grid(alpha=.3)
     if show_legend:
@@ -405,6 +403,58 @@ def perf_tester_over_obs(probability_net, summary_net, val_data, n_obs_min, n_ob
     plot_eces_over_obs(m_true, m_soft, n_obs_min, n_obs_max, n_cal_bins, pub_style, save)
 
 
+def plot_eces_over_obs_repeated(m_true, m_pred, n_obs_min, n_obs_max, narrow_ci, wide_ci, n_repetitions, 
+                                n_bins=15, show_legend=True, save=False):
+    """Helper function to plot eces as a function of N."""
+
+    f, ax = plt.subplots(1, 1, figsize=(5, 5))
+    
+    n_settings = n_obs_max + 1 - n_obs_min
+    n_obs_points = np.arange(n_obs_min, n_obs_max+1)
+
+    # Get ECEs, median and intervals for each setting and repetition
+    all_eces = np.zeros((n_settings, 25))
+    ece_medians = np.zeros(n_settings)
+    ece_narrow = np.zeros((n_settings, 2))
+    ece_wide = np.zeros((n_settings, 2))
+    
+    for n in range(n_settings):
+        setting_eces = []
+
+        for i in range(n_repetitions):
+            # List+append approach as not always all 15 bins are existing -> cant write results into multidim. array
+            prob_true, prob_pred = calibration_curve(m_true[n,i,:,1], m_pred[n,i,:,1], n_bins=n_bins)
+            ece = np.mean(np.abs(prob_true - prob_pred))
+            setting_eces.append(ece)
+        all_eces[n,:] = setting_eces
+        ece_medians[n] = np.squeeze(np.quantile(setting_eces, q=[0.5], axis=0))
+        ece_narrow[n] = np.quantile(setting_eces, q=narrow_ci, axis=0)
+        ece_wide[n] = np.quantile(setting_eces, q=wide_ci, axis=0)
+
+    ece_grand_median = np.squeeze(np.quantile(all_eces.flatten(), q=[0.5], axis=0)) # important: flatten nested list
+    print(f'Grand median ECE = {ece_grand_median}')
+
+    # Plot
+    #plt.axhline(y=ece_grand_median, linestyle='--', color='darkgrey')
+    ax.plot(n_obs_points, ece_medians, color=plotting_settings['colors_discrete'][0], label='Median')
+    ax.fill_between(n_obs_points, ece_narrow[:,0], ece_narrow[:,1], color=plotting_settings['colors_discrete'][0], 
+                alpha=0.3, label='{:.0%} CI'.format(narrow_ci[1]-narrow_ci[0]))
+    ax.fill_between(n_obs_points, ece_wide[:,0], ece_wide[:,1], color=plotting_settings['colors_discrete'][0], 
+                    alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0]))
+
+
+    # Plot settings
+    ax.set_ylim([0, 0.3])
+    ax.set_xlim([n_obs_min, n_obs_max])
+    ax.set_xlabel('Number of observations ($N$)', fontsize=plotting_settings['fontsize_labels'])
+    ax.set_ylabel(r'$\widehat{{\mathrm{{ECE}}}}$', fontsize=plotting_settings['fontsize_labels'])
+    ax.grid(alpha=.3)
+    if show_legend:
+        ax.legend(fontsize=12)
+    sns.despine(ax=ax)
+    if save == True:
+        f.savefig('calibration_variable_observations.pdf', dpi=300, bbox_inches='tight')
+
 
 # Calibration: Plotting for training with variable numbers of clusters and variable number of observations
 
@@ -471,58 +521,6 @@ def compute_eces_variable(probability_net, summary_net, simulator, n_val_per_set
         return eces, accuracies
 
     return eces
-
-def plot_eces_over_obs_repeated(m_true, m_pred, n_obs_min, n_obs_max, narrow_ci, wide_ci, n_repetitions, 
-                                n_bins=15, show_legend=True, save=False):
-    """Helper function to plot eces as a function of N."""
-
-    f, ax = plt.subplots(1, 1, figsize=(5, 5))
-    
-    n_settings = n_obs_max + 1 - n_obs_min
-    n_obs_points = np.arange(n_obs_min, n_obs_max+1)
-
-    # Get ECEs, median and intervals for each setting and repetition
-    all_eces = np.zeros((n_settings, 25))
-    ece_medians = np.zeros(n_settings)
-    ece_narrow = np.zeros((n_settings, 2))
-    ece_wide = np.zeros((n_settings, 2))
-    
-    for n in range(n_settings):
-        setting_eces = []
-
-        for i in range(n_repetitions):
-            # List+append approach as not always all 15 bins are existing -> cant write results into multidim. array
-            prob_true, prob_pred = calibration_curve(m_true[n,i,:,1], m_pred[n,i,:,1], n_bins=n_bins)
-            ece = np.mean(np.abs(prob_true - prob_pred))
-            setting_eces.append(ece)
-        all_eces[n,:] = setting_eces
-        ece_medians[n] = np.squeeze(np.quantile(setting_eces, q=[0.5], axis=0))
-        ece_narrow[n] = np.quantile(setting_eces, q=narrow_ci, axis=0)
-        ece_wide[n] = np.quantile(setting_eces, q=wide_ci, axis=0)
-
-    ece_grand_median = np.squeeze(np.quantile(all_eces.flatten(), q=[0.5], axis=0)) # important: flatten nested list
-    print(f'Grand median ECE = {ece_grand_median}')
-
-    # Plot
-    #plt.axhline(y=ece_grand_median, linestyle='--', color='darkgrey')
-    ax.plot(n_obs_points, ece_medians, color=plotting_settings['colors_discrete'][0], label='Median')
-    ax.fill_between(n_obs_points, ece_narrow[:,0], ece_narrow[:,1], color=plotting_settings['colors_discrete'][0], 
-                alpha=0.3, label='{:.0%} CI'.format(narrow_ci[1]-narrow_ci[0]))
-    ax.fill_between(n_obs_points, ece_wide[:,0], ece_wide[:,1], color=plotting_settings['colors_discrete'][0], 
-                    alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0]))
-
-
-    # Plot settings
-    ax.set_ylim([0, 0.3])
-    ax.set_xlim([n_obs_min, n_obs_max])
-    ax.set_xlabel('Number of observations ($N$)', fontsize=plotting_settings['fontsize_labels'])
-    ax.set_ylabel(r'$\widehat{{\mathrm{{ECE}}}}$', fontsize=plotting_settings['fontsize_labels'])
-    ax.grid(alpha=.3)
-    if show_legend:
-        ax.legend(fontsize=12)
-    sns.despine(ax=ax)
-    if save == True:
-        f.savefig('calibration_variable_observations.pdf', dpi=300, bbox_inches='tight')
 
 
 def plot_eces_variable(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max, save=False, zlims=[0, 0.3], zlabel='ECE'):
@@ -681,8 +679,8 @@ def plot_computation_times(results_time_list, names, save=False, ax=None):
 
 # Lévy flight application: Plot validation results
 
-def plot_validation_results(true_models, preds, pm_samples, narrow_ci, wide_ci, labels, save=False):
-    """ Plots all validation results in one plot. """
+def plot_validation_results(true_models, preds, labels, save=False):
+    """ Plots all validation results of the levy flight application in one plot. """
 
     true_models_flat = tf.argmax(true_models, axis=1)
     preds_flat = tf.argmax(preds, axis=1)
@@ -704,10 +702,9 @@ def plot_validation_results(true_models, preds, pm_samples, narrow_ci, wide_ci, 
 
     for m in range(true_models.shape[1]):
         m_true = true_models[:, m]
-        pm_samples_model = pm_samples[:, :, m]
-        plot_calibration_curve_uncertainty(m_true, pm_samples_model, narrow_ci=narrow_ci, wide_ci=wide_ci, 
-                                           n_bins=15, ax=ax_1[pos1[m], pos2[m]], xlabel=xlabels[m], 
-                                           ylabel=ylabels[m], title=labels[m], show_legend=False)
+        m_soft = preds[:, m]
+        plot_calibration_curve(m_true, m_soft, n_bins=10, ax=ax_1[pos1[m], pos2[m]], xlabel=xlabels[m], 
+                                ylabel=ylabels[m], title=labels[m], show_ece=True)
     
     if save:
         fig.savefig('levy_validation.pdf', dpi=300, bbox_inches='tight')
