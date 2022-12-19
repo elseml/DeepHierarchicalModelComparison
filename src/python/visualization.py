@@ -157,93 +157,7 @@ def perf_tester(probability_net, summary_net, val_data, n_bootstrap=100, n_cal_b
             fig.savefig('calibration_fixed_sizes.pdf', dpi=300, bbox_inches='tight')
 
 
-def plot_calibration_curve_uncertainty(m_true, pm_samples_model, narrow_ci, wide_ci, n_bins, ax, 
-                                       xlabel=True, ylabel=True, title=None, show_ece=True, show_legend=True):
-    """ Plots a calibration curve for a single model with dirichlet uncertainty (median line and two credible intervals).
-        Caution: Can throw a ValueError if one of the samples produces an empty bin (i.e. less than 15 bins) -> repeat.
-
-    Parameters
-    ----------
-    m_true : np.array
-            One-dimensional array that indicates whether the model is true or not. 
-    pm_samples_model : np.array
-            Two-dimensional array containing the posterior samples of the model's probability for each data set.
-    narrow_ci : list
-            The quantiles of the narrow credible interval.
-    wide_ci : list
-            The quantiles of the wide credible interval.
-    n_bins : int
-            Number of calibration bins.
-    ax : matplotlib Axes
-            Matplot axes object specifying the plot that should be used.
-    xlabel : boolean
-            Controls if the x-axis label is shown.
-    ylabel : boolean
-            Controls if the y-axis label is shown.
-    title : str
-            An optional title that can be provided.
-    show_ece : boolean
-            Controls if the Expected Calibration Error is shown.
-    show_legend : boolean
-            Controls if a legend is shown.
-    """
-
-    n_samples = pm_samples_model.shape[1]
-
-    # Get bins & ECE for each sample from the learned dirichlet distribution
-    probs_true = np.zeros((n_samples, n_bins))
-    probs_pred = np.zeros((n_samples, n_bins))
-
-    for n in range(n_samples):
-        m_soft = pm_samples_model[:, n]
-        probs_true[n, :], probs_pred[n, :] = calibration_curve(m_true, m_soft, n_bins=n_bins)
-    cal_err = np.mean(np.abs(probs_true - probs_pred))
-
-    # Get median for each bin 
-    probs_true_median = np.squeeze(np.quantile(probs_true, q=[0.5], axis=0))
-    probs_pred_median = np.squeeze(np.quantile(probs_pred, q=[0.5], axis=0))
-
-    # Get quantiles for each bin 
-    # Narrow credible interval
-    probs_true_narrow = np.quantile(probs_true, q=narrow_ci, axis=0)
-    probs_pred_narrow = np.quantile(probs_pred, q=narrow_ci, axis=0)
-    # Wide credible interval
-    probs_true_wide = np.quantile(probs_true, q=wide_ci, axis=0)
-    probs_pred_wide = np.quantile(probs_pred, q=wide_ci, axis=0)
-
-    # Plot median curve and diagonal
-    ax.plot((0,1), (0,1), '--', color='darkgrey')
-    ax.plot(probs_true_median, probs_pred_median, color=plotting_settings['colors_discrete'][0])
-
-    # Plot credible intervals
-    ax.fill(np.append(probs_true_wide[0,:], probs_true_wide[1,:][::-1]),
-            np.append(probs_pred_wide[0,:], probs_pred_wide[1,:][::-1]),
-            color=plotting_settings['colors_discrete'][0], alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0])) 
-    ax.fill(np.append(probs_true_narrow[0,:], probs_true_narrow[1,:][::-1]),
-            np.append(probs_pred_narrow[0,:], probs_pred_narrow[1,:][::-1]),
-            color=plotting_settings['colors_discrete'][0], alpha=0.3, label='{:.0%} CI'.format(narrow_ci[1]-narrow_ci[0]))
-
-    # Format plot
-    ax.set_xlim([0, 1])
-    ax.set_ylim([0, 1])
-    ax.set_xticks([0.2, 0.4, 0.6, 0.8, 1.0])
-    ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
-    if xlabel:
-            ax.set_xlabel('Accuracy')
-    if ylabel:
-            ax.set_ylabel('Confidence')
-    ax.set_title(title, fontsize=plotting_settings['fontsize_labels'])
-    ax.grid(alpha=.3)
-    if show_ece:
-            ax.text(0.1, 0.9, r'$\widehat{{\mathrm{{ECE}}}} = {0:.3f}$'.format(cal_err),
-                    horizontalalignment='left', verticalalignment='center',
-                    transform=ax.transAxes, size=12)
-    if show_legend:
-            ax.legend(loc="lower right", fontsize=plotting_settings['fontsize_legends'])
-    sns.despine(ax=ax)
-
-
-def plot_calibration_curve_repetition_uncertainty(m_true, m_soft, narrow_ci, wide_ci, n_bins, ax, 
+def plot_calibration_curve_repetition_uncertainty(m_true, m_soft, narrow_ci, wide_ci, n_bins, ax, print_accuracy=False,
                                     xlabel=True, ylabel=True, title=None, show_ece=True, show_legend=True):
     """ Plots a calibration curve for a single model with repetition uncertainty (median line and two credible intervals).
         Caution: Can throw a ValueError if one of the samples produces an empty bin (i.e. less than 15 bins) -> repeat.
@@ -285,6 +199,12 @@ def plot_calibration_curve_repetition_uncertainty(m_true, m_soft, narrow_ci, wid
         probs_true[n, :], probs_pred[n, :], eces[n] = calibration_curve_with_ece(m_true[n, :], m_soft[n, :], n_bins=n_bins)
     ece_median = np.squeeze(np.quantile(eces, q=[0.5], axis=0))
     print(f'Median ECE = {ece_median}')
+
+    if print_accuracy:
+        m_hard = (m_soft > 0.5).astype(np.int32)
+        accuracies = [accuracy_score(m_true[i,:], m_hard[i,:]) for i in range(n_repetitions)]
+        acc_median = np.squeeze(np.quantile(accuracies, q=[0.5], axis=0))
+        print(f'Median accuracy = {acc_median}')
 
     # Get median for each bin 
     probs_true_median = np.squeeze(np.quantile(probs_true, q=[0.5], axis=0))
@@ -404,7 +324,7 @@ def perf_tester_over_obs(probability_net, summary_net, val_data, n_obs_min, n_ob
 
 
 def plot_eces_over_obs_repeated(m_true, m_pred, n_obs_min, n_obs_max, narrow_ci, wide_ci, n_repetitions, 
-                                n_bins=15, show_legend=True, save=False):
+                                print_accuracy=False, n_bins=15, show_legend=True, save=False):
     """Helper function to plot eces as a function of N."""
 
     f, ax = plt.subplots(1, 1, figsize=(5, 5))
@@ -417,15 +337,20 @@ def plot_eces_over_obs_repeated(m_true, m_pred, n_obs_min, n_obs_max, narrow_ci,
     ece_medians = np.zeros(n_settings)
     ece_narrow = np.zeros((n_settings, 2))
     ece_wide = np.zeros((n_settings, 2))
+    if print_accuracy:
+        accuracies = []
     
     for n in range(n_settings):
         setting_eces = []
 
         for i in range(n_repetitions):
             # List+append approach as not always all 15 bins are existing -> cant write results into multidim. array
-            prob_true, prob_pred = calibration_curve(m_true[n,i,:,1], m_pred[n,i,:,1], n_bins=n_bins)
-            ece = np.mean(np.abs(prob_true - prob_pred))
+            prob_true, prob_pred, ece = calibration_curve_with_ece(m_true[n,i,:,1], m_pred[n,i,:,1], n_bins=n_bins)
             setting_eces.append(ece)
+
+            if print_accuracy:
+                accuracy = accuracy_score(m_true[n,i,:,1], (m_pred[n,i,:,1]> 0.5).astype(np.int32))
+                accuracies.append(accuracy)
         all_eces[n,:] = setting_eces
         ece_medians[n] = np.squeeze(np.quantile(setting_eces, q=[0.5], axis=0))
         ece_narrow[n] = np.quantile(setting_eces, q=narrow_ci, axis=0)
@@ -433,6 +358,10 @@ def plot_eces_over_obs_repeated(m_true, m_pred, n_obs_min, n_obs_max, narrow_ci,
 
     ece_grand_median = np.squeeze(np.quantile(all_eces.flatten(), q=[0.5], axis=0)) # important: flatten nested list
     print(f'Grand median ECE = {ece_grand_median}')
+
+    if print_accuracy:
+        acc_median = np.squeeze(np.quantile(accuracies, q=[0.5], axis=0))
+        print(f'Median accuracy = {acc_median}')
 
     # Plot
     #plt.axhline(y=ece_grand_median, linestyle='--', color='darkgrey')
@@ -444,7 +373,7 @@ def plot_eces_over_obs_repeated(m_true, m_pred, n_obs_min, n_obs_max, narrow_ci,
 
 
     # Plot settings
-    ax.set_ylim([0, 0.3])
+    ax.set_ylim([0, 0.1])
     ax.set_xlim([n_obs_min, n_obs_max])
     ax.set_xlabel('Number of observations ($N$)', fontsize=plotting_settings['fontsize_labels'])
     ax.set_ylabel(r'$\widehat{{\mathrm{{ECE}}}}$', fontsize=plotting_settings['fontsize_labels'])
@@ -500,9 +429,8 @@ def compute_eces_variable(probability_net, summary_net, simulator, n_val_per_set
                     m_true = m_val_sim[:, 1]  
 
                     # Compute calibration error
-                    prob_true, prob_pred = calibration_curve(m_true, m_soft, n_bins=n_cal_bins)
-                    cal_err = np.mean(np.abs(prob_true - prob_pred))
-                    eces.append(cal_err)
+                    prob_true, prob_pred, ece = calibration_curve_with_ece(m_true, m_soft, n_bins=n_cal_bins)
+                    eces.append(ece)
 
                     if add_accuracy:
                         accuracy = accuracy_score(m_true, m_hard)
@@ -523,7 +451,7 @@ def compute_eces_variable(probability_net, summary_net, simulator, n_val_per_set
     return eces
 
 
-def plot_eces_variable(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max, save=False, zlims=[0, 0.3], zlabel='ECE'):
+def plot_eces_variable(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max, save=False, zlims=[0, 0.1], zlabel='ECE'):
     """ 
     Takes the ECE results from compute_eces_variable() and 
     projects them onto a 3D-plot.
@@ -549,10 +477,7 @@ def plot_eces_variable(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max, sav
     ax.set_ylabel('Number of observations ($N$)', rotation=35) # not parallel to axis with automatic rotation    
     ax.set_zlabel(zlabel)
 
-    print(f'Mean ECE = {np.mean(eces)}')
-    #ax.text2D(0.05, 0.95, 'Mean ECE = {0:.3f}'.format(np.mean(eces)), transform=ax.transAxes)
-    #ax.text2D(0.05, 0.90, 'SD around mean ECE = {0:.3f}'.format(np.std(eces)), transform=ax.transAxes)
-    #ax.set_title('Expected Calibration Error (ECE)')
+    print(f'Median ECE = {np.squeeze(np.quantile(eces, q=[0.5], axis=0))}')
 
     if save == True:
         f.savefig('calibration_variable_sizes.pdf', dpi=300, bbox_inches='tight')
@@ -712,17 +637,17 @@ def plot_validation_results(true_models, preds, labels, save=False):
 
 # Lévy flight application: Visualize PMPs
 
-def plot_model_posteriors(dirichlet_samples, labels, title=None, save=False, ax=None):
-    """ Plots the model posteriors."""
+def plot_model_posteriors(samples, labels, ylabel=True, title=None, save=False, ax=None):
+    """ Plots the model posteriors given a set of PMP samples."""
 
-    # Prepare dirichlet samples
-    dirichlet_samples = np.squeeze(dirichlet_samples)
+    # Prepare samples
+    samples = np.squeeze(samples)
 
     # Plot
     if not ax:
         fig, ax = plt.subplots(1, 1, figsize=plotting_settings['figsize'])
 
-    violin_plot = ax.violinplot(dirichlet_samples, showmedians=True)
+    violin_plot = ax.violinplot(samples, showmedians=True)
     colors = plotting_settings['colors_discrete']
 
     for c, vp in zip(colors, violin_plot['bodies']):
@@ -736,7 +661,9 @@ def plot_model_posteriors(dirichlet_samples, labels, title=None, save=False, ax=
 
     ax.set_xticks([1, 2, 3, 4])
     ax.set_xticklabels(labels, fontsize=plotting_settings['fontsize_labels'])
-    ax.set_ylabel('Posterior model probability', fontsize=plotting_settings['fontsize_labels'])
+    ax.grid(alpha=.3)
+    if ylabel:
+        ax.set_ylabel('Posterior model probability', fontsize=plotting_settings['fontsize_labels'])
     ax.set_ylim([0, 1])
 
     if title:
@@ -775,7 +702,7 @@ def plot_noise_robustness(noise_proportions, mean_probs, mean_variabilities, lab
                 color=plotting_settings['colors_discrete'][m], 
                 alpha=plotting_settings['alpha'])
 
-    ax.legend(labels, fontsize=plotting_settings['fontsize_legends']) # between loops to correctly display lines and not shaded area
+    ax.legend(labels, fontsize=plotting_settings['fontsize_labels']) # between loops to correctly display lines and not shaded area
 
     for m in range(n_models):
         ax.fill_between(noise_proportions, 
@@ -786,6 +713,7 @@ def plot_noise_robustness(noise_proportions, mean_probs, mean_variabilities, lab
                     
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
+    ax.grid(alpha=.3)
     ax.set_xlabel('Percentage of missing data', fontsize=plotting_settings['fontsize_labels'])
     ax.set_ylabel('Posterior model probability', fontsize=plotting_settings['fontsize_labels'])
 
