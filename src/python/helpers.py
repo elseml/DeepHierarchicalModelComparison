@@ -7,6 +7,7 @@ from tensorflow.keras.utils import to_categorical
 from time import perf_counter
 
 from sklearn.utils import column_or_1d, assert_all_finite, check_consistent_length
+from sklearn.metrics import accuracy_score
 from sklearn.metrics._base import _check_pos_label_consistency
 
 
@@ -62,13 +63,7 @@ def n_clust_obs_v_v(n_clust_min, n_clust_max, n_obs_min, n_obs_max):
 # Calibration
 
 # Get calibration curve and ECE 
-def calibration_curve_with_ece(
-    y_true,
-    y_prob,
-    pos_label=None,
-    n_bins=15,
-    strategy="uniform",
-):
+def calibration_curve_with_ece(y_true, y_prob, pos_label=None, n_bins=15, strategy="uniform"):
     """
     [sklearn.calibration.calibration_curve source code supplemented with an ECE calculation 
      proposed by chrisyeh96 in issue #18268 of the scikit-learn github repository.]
@@ -242,6 +237,71 @@ def get_bootstrapped_predictions(probability_net, summary_net, simulated_data, s
         m_true[i,:,:] = simulated_indices[b_idx]
 
     return m_true, m_soft
+
+
+# Calibration: Plotting for training with variable numbers of clusters and variable number of observations
+def compute_eces_variable(probability_net, summary_net, simulator, n_val_per_setting, n_clust_min, n_clust_max, 
+                          n_obs_min, n_obs_max, n_cal_bins=15, add_accuracy=False):
+    """
+    Simulates validation data per setting and computes the expected calibration error of the model.
+    --------
+
+    Returns:
+    2 lists of shape((n_clust_max+1 - n_clust_min)*(n_obs_max+1 - n_obs_min)) 
+    - containing the mean (1st list) / sd (2nd list) eces of all possible combinations on L and N.
+    """
+    
+    def n_clust_obs_f_v_val(l, n):
+        """
+        Nasty hack to make compatible with BayesFlow.
+        Defines a fixed number of clusters and a number of observations that is iterated through.
+        """
+        
+        K = l
+        N = n
+        return (K, N)
+    
+    # Create lists
+    eces = []
+    if add_accuracy:
+        accuracies = []
+    
+    with tqdm(total=(n_clust_max+1 - n_clust_min), desc='Loop through clusters progress') as p_bar: 
+        with tqdm(total=(n_obs_max+1 - n_obs_min), desc='Loop through nested observations progress') as p_bar_within:
+            for l in range(n_clust_min, n_clust_max+1): # Loop through clusters
+                
+                p_bar_within.reset((n_obs_max+1 - n_obs_min)) # reuse 2nd bar so that screen doesn't explode
+                for n in range(n_obs_min, n_obs_max+1): # Loop through nested observations
+
+                    # Simulate validation data
+                    m_val_sim, _, x_val_sim = simulator(n_val_per_setting, n_clust_obs_f_v_val(l, n))
+
+                    # Predict model probabilities
+                    m_soft = tf.concat([probability_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(x_val_sim, 20)], axis=0).numpy()      
+                    m_hard = (m_soft > 0.5).astype(np.int32)
+                    m_true = m_val_sim[:, 1]  
+
+                    # Compute calibration error
+                    prob_true, prob_pred, ece = calibration_curve_with_ece(m_true, m_soft, n_bins=n_cal_bins)
+                    eces.append(ece)
+
+                    if add_accuracy:
+                        accuracy = accuracy_score(m_true, m_hard)
+                        accuracies.append(accuracy)
+
+                    # Update inner progress bar
+                    p_bar_within.set_postfix_str("Cluster {0}, Observation {1}".format(l, n + 1))
+                    p_bar_within.update()
+
+                # Refresh inner + update outer progress bar
+                p_bar_within.refresh() 
+                p_bar.set_postfix_str("Finished clusters: {}".format(l))
+                p_bar.update()
+    
+    if add_accuracy:
+        return eces, accuracies
+
+    return eces
 
 
 # Bridge sampling comparison: data transformations

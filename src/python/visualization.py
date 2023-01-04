@@ -290,8 +290,8 @@ def plot_eces_over_obs(m_true, m_pred, n_obs_min, n_obs_max, n_bins, pub_style, 
 
 
     ax.set_xlim([n_obs_min, n_obs_max])
-    ax.set_xlabel('Number of observations ($N$)')
-    ax.set_ylabel('ECE')
+    ax.set_xlabel('Number of observations ($N_m$)')
+    ax.set_ylabel(r'$\widehat{{\mathrm{{ECE}}}}$')
     sns.despine(ax=ax)
     
     print(f'Mean ECE = {mean_ece}')
@@ -375,7 +375,7 @@ def plot_eces_over_obs_repeated(m_true, m_pred, n_obs_min, n_obs_max, narrow_ci,
     # Plot settings
     ax.set_ylim([0, 0.1])
     ax.set_xlim([n_obs_min, n_obs_max])
-    ax.set_xlabel('Number of observations ($N$)', fontsize=plotting_settings['fontsize_labels'])
+    ax.set_xlabel('Number of observations ($N_m$)', fontsize=plotting_settings['fontsize_labels'])
     ax.set_ylabel(r'$\widehat{{\mathrm{{ECE}}}}$', fontsize=plotting_settings['fontsize_labels'])
     ax.grid(alpha=.3)
     if show_legend:
@@ -387,71 +387,7 @@ def plot_eces_over_obs_repeated(m_true, m_pred, n_obs_min, n_obs_max, narrow_ci,
 
 # Calibration: Plotting for training with variable numbers of clusters and variable number of observations
 
-def compute_eces_variable(probability_net, summary_net, simulator, n_val_per_setting, n_clust_min, n_clust_max, 
-                          n_obs_min, n_obs_max, n_cal_bins=15, add_accuracy=False):
-    """
-    Simulates validation data per setting and computes the expected calibration error of the model.
-    --------
-
-    Returns:
-    2 lists of shape((n_clust_max+1 - n_clust_min)*(n_obs_max+1 - n_obs_min)) 
-    - containing the mean (1st list) / sd (2nd list) eces of all possible combinations on L and N.
-    """
-    
-    def n_clust_obs_f_v_val(l, n):
-        """
-        Nasty hack to make compatible with BayesFlow.
-        Defines a fixed number of clusters and a number of observations that is iterated through.
-        """
-        
-        K = l
-        N = n
-        return (K, N)
-    
-    # Create lists
-    eces = []
-    if add_accuracy:
-        accuracies = []
-    
-    with tqdm(total=(n_clust_max+1 - n_clust_min), desc='Loop through clusters progress') as p_bar: 
-        with tqdm(total=(n_obs_max+1 - n_obs_min), desc='Loop through nested observations progress') as p_bar_within:
-            for l in range(n_clust_min, n_clust_max+1): # Loop through clusters
-                
-                p_bar_within.reset((n_obs_max+1 - n_obs_min)) # reuse 2nd bar so that screen doesn't explode
-                for n in range(n_obs_min, n_obs_max+1): # Loop through nested observations
-
-                    # Simulate validation data
-                    m_val_sim, _, x_val_sim = simulator(n_val_per_setting, n_clust_obs_f_v_val(l, n))
-
-                    # Predict model probabilities
-                    m_soft = tf.concat([probability_net.predict(summary_net(x_chunk))['m_probs'][:, 1] for x_chunk in tf.split(x_val_sim, 20)], axis=0).numpy()      
-                    m_hard = (m_soft > 0.5).astype(np.int32)
-                    m_true = m_val_sim[:, 1]  
-
-                    # Compute calibration error
-                    prob_true, prob_pred, ece = calibration_curve_with_ece(m_true, m_soft, n_bins=n_cal_bins)
-                    eces.append(ece)
-
-                    if add_accuracy:
-                        accuracy = accuracy_score(m_true, m_hard)
-                        accuracies.append(accuracy)
-
-                    # Update inner progress bar
-                    p_bar_within.set_postfix_str("Cluster {0}, Observation {1}".format(l, n + 1))
-                    p_bar_within.update()
-
-                # Refresh inner + update outer progress bar
-                p_bar_within.refresh() 
-                p_bar.set_postfix_str("Finished clusters: {}".format(l))
-                p_bar.update()
-    
-    if add_accuracy:
-        return eces, accuracies
-
-    return eces
-
-
-def plot_eces_variable(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max, save=False, zlims=[0, 0.1], zlabel='ECE'):
+def plot_eces_variable(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max, save=False, zlims=[0, 0.1], zlabel=r'$\widehat{{\mathrm{{ECE}}}}$'):
     """ 
     Takes the ECE results from compute_eces_variable() and 
     projects them onto a 3D-plot.
@@ -474,7 +410,7 @@ def plot_eces_variable(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max, sav
     ax.set_zlim(zlims)
     ax.set_xlabel('Number of groups ($M$)')
     ax.yaxis.set_rotate_label(False) # disable automatic label rotation
-    ax.set_ylabel('Number of observations ($N$)', rotation=35) # not parallel to axis with automatic rotation    
+    ax.set_ylabel('Number of observations ($N_m$)', rotation=35) # not parallel to axis with automatic rotation    
     ax.set_zlabel(zlabel)
 
     print(f'Median ECE = {np.squeeze(np.quantile(eces, q=[0.5], axis=0))}')
@@ -492,7 +428,7 @@ def plot_eces_marginalized(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max,
         n_min, n_max = n_clust_min, n_clust_max
 
     elif x_axis == 1:
-        xlabel='$N$'
+        xlabel='$N_m$'
         axis = 1
         n_min, n_max = n_obs_min, n_obs_max
 
@@ -511,7 +447,7 @@ def plot_eces_marginalized(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max,
     ax.set_xlim([n_min, n_max])
     ax.set_ylim([0, 0.4])
     ax.set_xlabel(xlabel)
-    ax.set_ylabel('ECE')
+    ax.set_ylabel(r'$\widehat{{\mathrm{{ECE}}}}$')
     ax.grid(alpha=.3)
 
 
@@ -538,7 +474,7 @@ def plot_approximations(bridge_sampling_results, NN_results, approximated_outcom
     if approximated_outcome == 'PMPs': # PMPs
         bridge_data = bridge_sampling_results['m1_prob']
         NN_data = NN_results['m1_prob']
-        label_outcome = r'$p(' + f'{model_names[1]}' + r'\,|\,\it{x})$'
+        label_outcome = r'$p($' + f'{model_names[1]}' + r'$\,|\,\it{x})$'
         
     elif approximated_outcome == 'Log BFs': # Log BFs
         bridge_data = log_with_inf_noise_addition(bridge_sampling_results)
@@ -549,8 +485,8 @@ def plot_approximations(bridge_sampling_results, NN_results, approximated_outcom
 
     ax.scatter(bridge_data, NN_data, c=bridge_sampling_results['true_model'].map(colors), alpha=.8)
     helperlist = [plt.plot([], marker="o", ls="", color=color, alpha=.8)[0] for color in colors.values()] # hack for legend
-    legend_test = [r'Simulated from ' + f'${model_names[0]}$', 
-                   r'Simulated from ' + f'${model_names[1]}$']
+    legend_test = [r'Simulated from ' + f'{model_names[0]}', 
+                   r'Simulated from ' + f'{model_names[1]}']
     ax.legend(helperlist, legend_test, loc='upper left', fontsize=plotting_settings['fontsize_legends'])
     ax.plot(ax.get_xlim(), ax.get_xlim(), '--', color='darkgrey')
     ax.spines['right'].set_visible(False)
