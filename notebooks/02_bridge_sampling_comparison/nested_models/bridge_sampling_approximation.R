@@ -11,7 +11,7 @@ setwd(dirname(dirname(dirname(dirname(rstudioapi::getSourceEditorContext()$path)
 
 ### Utility functions
 
-save_parameter_estimates <- function(row, stanfits, parameter_estimates){
+save_parameter_estimates <- function(row, stanfits, parameter_estimates, test_data_true_indices){
   # loops through model fits to save parameter estimates
   for (j in 1:length(stanfits)){
     # prepare rstan output
@@ -41,8 +41,8 @@ save_parameter_estimates <- function(row, stanfits, parameter_estimates){
 
 
 ### Import test data sets
-test_data <- np$load("data/02_bridge_sampling_comparison/test_data.npy", allow_pickle = TRUE)[[1]][[1]]
-test_data_true_indices <- np$load("data/02_bridge_sampling_comparison/test_data_true_indices.npy")
+test_data <- np$load("data/02_bridge_sampling_comparison/nested_models/test_data.npy", allow_pickle = TRUE)[[1]][[1]]
+test_data_true_indices <- np$load("data/02_bridge_sampling_comparison/nested_models/test_data_true_indices.npy")
 
 
 
@@ -169,12 +169,11 @@ for (i in 1:dim(test_data)[1]){
   )
 
   # Fit
-  # FOR TESTING: 5,000 iterations instead of 50,000
   stanfit_model0 <- sampling(model0, data = data_and_priors0,
-                        iter = 50000, warmup = 1000, chains = 3, cores = 3)
+                        iter = 50000, warmup = 1000, chains = 4, cores = 4)
   
   stanfit_model1 <- sampling(model1, data = data_and_priors1,
-                             iter = 50000, warmup = 1000, chains = 3, cores = 3)
+                             iter = 50000, warmup = 1000, chains = 4, cores = 4)
   
   # Measure Stan end time
   stan_end <- Sys.time()
@@ -182,7 +181,7 @@ for (i in 1:dim(test_data)[1]){
   # Save parameter estimates
   stanfits <- list(as.matrix(stanfit_model0),as.matrix(stanfit_model1))
   
-  parameter_estimates <- save_parameter_estimates(i, stanfits, parameter_estimates)
+  parameter_estimates <- save_parameter_estimates(i, stanfits, parameter_estimates, test_data_true_indices)
   
   ### Bridge Sampling
   
@@ -239,13 +238,45 @@ comparison_results
 
 ### Export experimental results
 exp_time <- format(Sys.time(), '%Y_%m_%d')
-exp_file_params <- sprintf("data/02_bridge_sampling_comparison/%s_BF_BS_params", exp_time)
-exp_file_comp <- sprintf("data/02_bridge_sampling_comparison/%s_BF_BS", exp_time)
+exp_file_params <- sprintf("data/02_bridge_sampling_comparison/nested_models/%s_BF_BS_params", exp_time)
+exp_file_comp <- sprintf("data/02_bridge_sampling_comparison/nested_models/%s_BF_BS", exp_time)
 
 write.table(parameter_estimates, file=exp_file_params)
 write.table(comparison_results, file=exp_file_comp)
 
 ### Load results of earlier experiments
-old_params <- read.table("data/02_bridge_sampling_comparison/2022_05_03_BF_BS_params")
-old_comp <- read.table("data/02_bridge_sampling_comparison/2022_05_03_BF_BS")
+old_params <- read.table("data/02_bridge_sampling_comparison/nested_models/2022_05_03_BF_BS_params")
+old_comp <- read.table("data/02_bridge_sampling_comparison/nested_models/2022_05_03_BF_BS")
 
+
+
+##### Diagnostics ######
+# Inspect single stanfit objects
+
+### Convential n_eff and Rhat statistics
+summary(stanfit_model0)$summary
+summary(stanfit_model1)$summary
+
+#### Improved Rhat and ess statistics
+# mu (only estimated in model1)
+Rhat(extract_variable_matrix(stanfit_model1, "mu"))
+ess_bulk(extract_variable_matrix(stanfit_model1, "mu"))
+ess_tail(extract_variable_matrix(stanfit_model1, "mu"))
+
+# tau2
+Rhat(extract_variable_matrix(stanfit_model0, "tau2"))
+ess_bulk(extract_variable_matrix(stanfit_model0, "tau2"))
+ess_tail(extract_variable_matrix(stanfit_model0, "tau2"))
+
+Rhat(extract_variable_matrix(stanfit_model1, "tau2"))
+ess_bulk(extract_variable_matrix(stanfit_model1, "tau2"))
+ess_tail(extract_variable_matrix(stanfit_model1, "tau2"))
+
+# sigma2
+Rhat(extract_variable_matrix(stanfit_model0, "sigma2"))
+ess_bulk(extract_variable_matrix(stanfit_model0, "sigma2"))
+ess_tail(extract_variable_matrix(stanfit_model0, "sigma2"))
+
+Rhat(extract_variable_matrix(stanfit_model1, "sigma2"))
+ess_bulk(extract_variable_matrix(stanfit_model1, "sigma2"))
+ess_tail(extract_variable_matrix(stanfit_model1, "sigma2"))
