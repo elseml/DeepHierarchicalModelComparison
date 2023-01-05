@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 *.png
+*.pdf
 *.Rhistory
 
 # Tensorflow checkpoints
