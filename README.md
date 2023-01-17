@@ -15,8 +15,8 @@ Code for reproducing the calibration experiments of validation study 1 that are 
 
 ### [02_bridge_sampling_comparison](notebooks/02_bridge_sampling_comparison)
 
-Code for reproducing the bridge sampling benchmarking of validation study 1, in which the approximation performance of the networks from calibration_fixed_sizes and calibration_variable_sizes is tested against bridge sampling, can be found in [02_bridge_sampling_comparison](notebooks/02_bridge_sampling_comparison/nested_models).
-Code for reproducing the calibration experiment and bridge sampling benchmarking of validation study 2, based on the comparison of hierarchical SDT and MPT models, can be found in [02_bridge_sampling_comparison](notebooks/02_bridge_sampling_comparison/non_nested_models).
+- [02_bridge_sampling_comparison/nested_models](notebooks/02_bridge_sampling_comparison/nested_models): Code for reproducing the bridge sampling benchmarking of validation study 1, in which the approximation performance of the neural network is tested against bridge sampling on a toy example.
+- [02_bridge_sampling_comparison/non_nested_models](notebooks/02_bridge_sampling_comparison/non_nested_models): Code for reproducing the calibration experiment and bridge sampling benchmarking of validation study 2, based on the comparison of hierarchical SDT and MPT models.
 
 ### [03_levy_flight_application](notebooks/03_levy_flight_application)
 
