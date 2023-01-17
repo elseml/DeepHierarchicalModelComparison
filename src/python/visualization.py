@@ -479,7 +479,7 @@ def plot_approximations(bridge_sampling_results, NN_results, approximated_outcom
     elif approximated_outcome == 'Log BFs': # Log BFs
         bridge_data = log_with_inf_noise_addition(bridge_sampling_results)
         NN_data = log_with_inf_noise_addition(NN_results)
-        label_outcome = r'$\ln (\mathrm{BF}_{21})$' 
+        label_outcome = r'$\mathrm{log} (\mathrm{BF}_{21})$' 
 
     colors = {0:plotting_settings['colors_discrete'][3], 1:plotting_settings['colors_discrete'][0]}
 
@@ -520,7 +520,7 @@ def plot_computation_times(results_time_list, names, save=False, ax=None):
     
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
-    ax.set_xlabel('Data set', fontsize=plotting_settings['fontsize_labels']) # add (cumulative)? 
+    ax.set_xlabel('Number of data sets', fontsize=plotting_settings['fontsize_labels']) # add (cumulative)? 
     ax.set_ylabel('Computation time in minutes', fontsize=plotting_settings['fontsize_labels'])
     ax.set_xlim(xmin=1, xmax=len(results_time_list[0]))
     ax.set_ylim(ymin=0)
@@ -549,13 +549,9 @@ def plot_validation_results(true_models, preds, labels, save=False):
     # Create subfigures
     fig = plt.figure(constrained_layout=True, figsize=(10, 5))
     subfigs = fig.subfigures(nrows=1, ncols=2, wspace=0.07, hspace=0.07)
-    
-    # Confusion matrix
-    ax_0 = subfigs[0].subplots(nrows=1, ncols=1)
-    plot_confusion_matrix(true_models_flat, preds_flat, labels, ax=ax_0, title=False)
 
     # Calibration curves
-    ax_1 = subfigs[1].subplots(nrows=2, ncols=2)
+    ax_0 = subfigs[0].subplots(nrows=2, ncols=2)
     pos1 = [0,0,1,1]
     pos2 = [0,1,0,1]
     xlabels = [False, False, True, True]
@@ -564,8 +560,12 @@ def plot_validation_results(true_models, preds, labels, save=False):
     for m in range(true_models.shape[1]):
         m_true = true_models[:, m]
         m_soft = preds[:, m]
-        plot_calibration_curve(m_true, m_soft, n_bins=10, ax=ax_1[pos1[m], pos2[m]], xlabel=xlabels[m], 
+        plot_calibration_curve(m_true, m_soft, n_bins=10, ax=ax_0[pos1[m], pos2[m]], xlabel=xlabels[m], 
                                 ylabel=ylabels[m], title=labels[m], show_ece=True)
+
+    # Confusion matrix
+    ax_1 = subfigs[1].subplots(nrows=1, ncols=1)
+    plot_confusion_matrix(true_models_flat, preds_flat, labels, ax=ax_1, title=False)
     
     if save:
         fig.savefig('levy_validation.pdf', dpi=300, bbox_inches='tight')
