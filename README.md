@@ -2,7 +2,7 @@
 
 
 
-This repository contains code for reproducting all results reported in the paper.
+This repository contains code for reproducing all results reported in the paper.
 
 ## [notebooks](notebooks)
 
