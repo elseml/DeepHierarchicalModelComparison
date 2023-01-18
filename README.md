@@ -2,7 +2,7 @@
 
 
 
-This repository contains code for reproducting all results reported in the paper.
+This repository contains code for reproducing all results reported in the paper "Amortized Comparison of Bayesian Hierarchical Models with Neural Networks" by Lasse Elsemüller, Martin Schnuerch, Paul-Christian Bürkner and Stefan T. Radev.
 
 ## [notebooks](notebooks)
 
