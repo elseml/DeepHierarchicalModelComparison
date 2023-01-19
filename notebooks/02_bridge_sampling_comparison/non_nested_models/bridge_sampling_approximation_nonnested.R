@@ -1,6 +1,8 @@
 library(tidyverse)
 library(rstan)
 library(bridgesampling)
+library(bayesplot)
+library(posterior)
 library(reticulate)
 np <- import("numpy")
 
@@ -61,7 +63,7 @@ test_data_true_indices <- np$load("data/02_bridge_sampling_comparison/non_nested
 
 ### prepare result matrices
 
-# prepare matrices for parameter recovery results
+## prepare matrices for parameter recovery results
 column_names_pars <- c("dataset","true_model","mean(p_h_m)","var(p_h_m)","mean(p_f_m)","var(p_f_m)",
                        "mu_h","sigma_h","mu_f","sigma_f","mu_d","mu_g","lambdas_1","lambdas_2",
                        "Q[1,1]","Q[1,2]","Q[2,1]","Q[2,2]")
@@ -74,12 +76,16 @@ colnames(parameter_estimates_mpt) <- column_names_pars
 # store
 parameter_estimates <- list(parameter_estimates_sdt, parameter_estimates_mpt)
 
-# prepare matrix for comparison results
+## prepare matrix for comparison results
 column_names_comp <- c("dataset","true_model","m0_prob","m1_prob","selected_model",
                        "bayes_factor", "m0_bridge_error", "m1_bridge_error", 
                        "compile_time", "stan_time", "bridge_time") # m0 = sdt / m1 = mpt
 comparison_results <- matrix(nrow = dim(test_data)[1], ncol = length(column_names_comp))
 colnames(comparison_results) <- column_names_comp
+
+## prepare matrix to log number of divergent transitions
+n_div_transitions <- matrix(nrow = 100, ncol = 2)
+
 
 ### Specify Stan models
 
@@ -98,7 +104,6 @@ mpt_model <- stan_model(file = mpt_model_file)
 compile_end <- Sys.time()
 compile_time <- difftime(compile_end, compile_start, unit="secs")
 print(compile_time)
-
 
 ### Loop over test data sets
 
@@ -131,11 +136,8 @@ for (i in 1:dim(test_data)[1]){
 
   
   # Fit
-  sdt_fit <- sampling(sdt_model, data = sdt_data,
-                             iter = 50000, warmup = 1000, chains = 4, cores = 4)
-  
-  mpt_fit <- sampling(mpt_model, data = mpt_data,
-                             iter = 50000, warmup = 1000, chains = 4, cores = 4)
+  sdt_fit <- sampling(sdt_model, data = sdt_data, iter = 50000, warmup = 1000, chains = 4, cores = 4, control=list(adapt_delta=0.99))
+  mpt_fit <- sampling(mpt_model, data = mpt_data, iter = 50000, warmup = 1000, chains = 4, cores = 4, control=list(adapt_delta=0.99))
   
   # Measure Stan end time
   stan_end <- Sys.time()
@@ -144,6 +146,10 @@ for (i in 1:dim(test_data)[1]){
   stanfits <- list(as.matrix(sdt_fit),as.matrix(mpt_fit))
   
   parameter_estimates <- save_parameter_estimates(i, stanfits, parameter_estimates, test_data_true_indices)
+  
+  # Optional: Save div. transitions to explore their impact
+  n_div_transitions[i,1] <- sum(subset(nuts_params(sdt_fit), Parameter == "divergent__")$Value)
+  n_div_transitions[i,2] <- sum(subset(nuts_params(mpt_fit), Parameter == "divergent__")$Value)
   
   ### Bridge Sampling
   
@@ -193,7 +199,6 @@ for (i in 1:dim(test_data)[1]){
   print(sprintf("Bridge Sampling time: %s", bridge_time))
 }
 
-
 ### Check output
 parameter_estimates
 comparison_results
@@ -206,12 +211,14 @@ exp_file_comp <- sprintf("data/02_bridge_sampling_comparison/non_nested_models/%
 write.table(parameter_estimates, file=exp_file_params)
 write.table(comparison_results, file=exp_file_comp)
 
-
+# Optional: Export number of divergent transitions per fit
+n_div_t_file = sprintf("data/02_bridge_sampling_comparison/non_nested_models/%s_BF_BS_n_div_trans", exp_time)
+write.table(n_div_transitions, file=n_div_t_file)
 
 
 ### Load results of earlier experiments
-old_params <- read.table("data/02_bridge_sampling_comparison/nested_models/2022_05_03_BF_BS_params")
-old_comp <- read.table("data/02_bridge_sampling_comparison/nested_models/2022_05_03_BF_BS")
+old_params <- read.table("data/02_bridge_sampling_comparison/non_nested_models/2022_05_03_BF_BS_params")
+old_comp <- read.table("data/02_bridge_sampling_comparison/non_nested_models/2022_05_03_BF_BS")
 
 
 
