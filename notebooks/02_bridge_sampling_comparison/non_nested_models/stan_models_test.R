@@ -2,6 +2,7 @@
 library(rstan)
 library(posterior)
 library(reticulate)
+library(bayesplot)
 np <- import("numpy")
 
 
@@ -11,7 +12,7 @@ setwd(dirname(dirname(dirname(dirname(rstudioapi::getSourceEditorContext()$path)
 
 ### Load data and models
 test_data <- np$load("data/02_bridge_sampling_comparison/non_nested_models/test_data.npy", allow_pickle = TRUE)[[1]][[1]]
-test_data_single <- test_data[1,,,] # Data set 1-3 are simulated from SDT, 4+9-11 from MPT
+test_data_single <- test_data[95,,,] # Data set 1-3 are simulated from SDT, 4+9-11 from MPT
 sdt_model_file <-"notebooks/02_bridge_sampling_comparison/non_nested_models/sdt_model.stan"
 mpt_model_file <-"notebooks/02_bridge_sampling_comparison/non_nested_models/mpt_model.stan"
 
@@ -24,7 +25,7 @@ mpt_data <- list(
   N_old_new = dim(test_data_single)[2]/2, # Number of old/new items, equal as 50/50 proportion of old and new items is given
   X = test_data_single[,,2] # 2D array of observations (without condition indicator).
 )
-mpt_fit <- sampling(mpt_model, data = mpt_data, iter = 5000, warmup = 1000, chains = 4, cores = 4)
+mpt_fit <- sampling(mpt_model, data = mpt_data, iter = 50000, warmup = 1000, chains = 4, cores = 4)
 # Times for sampling test data set 1:
 # Initial version: 190sec for 5000 samples
 # 47sec when replacing inv. Wishart with LKJ
@@ -40,11 +41,14 @@ sdt_data <- list(
   N_old_new = dim(test_data_single)[2]/2, # Number of old/new items, equal as 50/50 proportion of old and new items is given
   X = test_data_single[,,2] # 2D array of observations (without condition indicator).
 )
-sdt_fit <- sampling(sdt_model, data = sdt_data, iter = 5000, warmup = 1000, chains = 4, cores = 4)
+sdt_fit <- sampling(sdt_model, data = sdt_data, iter = 50000, warmup = 1000, chains = 4, cores = 4)
 # Times for sampling test data set 1:
 # Initial version: 30sec for 5000 samples
 # After vectorization: 4sec
 
+# extract # of divergent transitions
+sum(subset(nuts_params(mpt_fit), Parameter == "divergent__")$Value)
+sum(subset(nuts_params(sdt_fit), Parameter == "divergent__")$Value)
 
 ##### Diagnostics #####
 
@@ -123,3 +127,13 @@ ess_tail(extract_variable_matrix(mpt_fit, "Q[2,1]"))
 Rhat(extract_variable_matrix(mpt_fit, "Q[2,2]"))
 ess_bulk(extract_variable_matrix(mpt_fit, "Q[2,2]"))
 ess_tail(extract_variable_matrix(mpt_fit, "Q[2,2]"))
+
+#### pairs() plots
+mcmc_pairs(mpt_fit, pars = c("mu_d", "mu_g", "lambdas[1]", "lambdas[2]",
+                           "Q[1,1]", "Q[1,2]", "Q[2,2]")) # drop Q[2,1] as it's duplicative to Q[1,2]
+mcmc_pairs(sdt_fit, pars = c("mu_h", "sigma_h", "mu_f", "sigma_f"))
+
+
+### Load estimates for the test set for closer inspection
+old_params <- read.table("data/02_bridge_sampling_comparison/non_nested_models/2022_12_02_BF_BS_params")
+old_comp <- read.table("data/02_bridge_sampling_comparison/non_nested_models/2022_12_02_BF_BS")
