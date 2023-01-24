@@ -2,7 +2,9 @@
 
 
 
-This repository contains code for reproducing all results reported in the paper "Amortized Comparison of Bayesian Hierarchical Models with Neural Networks" by Lasse Elsemüller, Martin Schnuerch, Paul-Christian Bürkner and Stefan T. Radev.
+This repository contains code for reproducing all results reported in the paper "A Deep Learning Method for Comparing Bayesian Hierarchical Models" by Lasse Elsemüller, Martin Schnuerch, Paul-Christian Bürkner and Stefan T. Radev.
+
+![](hierarchical_BMC.png)
 
 ## [notebooks](notebooks)
 
@@ -27,6 +29,8 @@ Code for reproducing the application study in which two variants of the drift di
 - [04_validate_networks](notebooks/03_levy_flight_application/04_validate_networks.ipynb): Validate the trained networks on new simulated data sets.
 - [05_apply_networks](notebooks/03_levy_flight_application/05_apply_networks.ipynb): Apply the trained networks to the empirical data set.
 
+Here, we reanalyzed data from "Jumping to Conclusion? A Lévy Flight Model of Decision Making" by Eva Marie Wieschen, Andreas Voss and Stefan T. Radev. The data set can be requested from the authors of the original study.
+
 ## [src](src)
 
-Contains custom [Julia](src/julia) and [Python](src/python) functions that enable the analyses.
+Contains custom [Julia](src/julia) and [Python](src/python) functions that enable the analyses, including our proposed hierarchical neural network architecture.
