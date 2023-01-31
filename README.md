@@ -2,7 +2,7 @@
 
 
 
-This repository contains code for reproducing all results reported in the paper "A Deep Learning Method for Comparing Bayesian Hierarchical Models" by Lasse Elsemüller, Martin Schnuerch, Paul-Christian Bürkner and Stefan T. Radev.
+This repository contains code for reproducing all results reported in the paper "A Deep Learning Method for Comparing Bayesian Hierarchical Models" by Lasse Elsemüller, Martin Schnuerch, Paul-Christian Bürkner and Stefan T. Radev (https://arxiv.org/abs/2301.11873).
 
 ![](hierarchical_BMC.png)
 
