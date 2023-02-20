@@ -108,7 +108,6 @@ print(compile_time)
 ### Loop over test data sets
 
 for (i in 1:dim(test_data)[1]){    
-#for (i in 1:2){                       # FOR TESTING: 1:x
   
   # select data set
   test_data_single <- test_data[i,,,]
@@ -136,8 +135,9 @@ for (i in 1:dim(test_data)[1]){
 
   
   # Fit
-  sdt_fit <- sampling(sdt_model, data = sdt_data, iter = 50000, warmup = 1000, chains = 4, cores = 4, control=list(adapt_delta=0.99))
-  mpt_fit <- sampling(mpt_model, data = mpt_data, iter = 50000, warmup = 1000, chains = 4, cores = 4, control=list(adapt_delta=0.99))
+  sdt_fit <- sampling(sdt_model, data = sdt_data, iter = 50000, warmup = 1000, chains = 4, cores = 4) #control=list(adapt_delta=0.99))
+  mpt_fit <- sampling(mpt_model, data = mpt_data, iter = 50000, warmup = 1000, chains = 4, cores = 4) #control=list(adapt_delta=0.99))
+  # adapt_delta=0.99 leads to less divergent transitions, but doubles sampling time while not improving approximation performance
   
   # Measure Stan end time
   stan_end <- Sys.time()
