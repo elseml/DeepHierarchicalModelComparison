@@ -385,6 +385,83 @@ def plot_eces_over_obs_repeated(m_true, m_pred, n_obs_min, n_obs_max, narrow_ci,
         f.savefig('calibration_variable_observations.pdf', dpi=300, bbox_inches='tight')
 
 
+def plot_metric_over_obs_repeated(m_true, m_pred, n_obs_min, n_obs_max, narrow_ci, wide_ci, n_repetitions, 
+                                  metric='ECE', print_accuracy=False, n_bins=15, show_legend=True, save=False):
+    """Helper function to plot metrics as a function of N."""
+
+    f, ax = plt.subplots(1, 1, figsize=(5, 5))
+    
+    n_settings = n_obs_max + 1 - n_obs_min
+    n_obs_points = np.arange(n_obs_min, n_obs_max+1)
+
+    # Get metrics, median and intervals for each setting and repetition
+    all_metrics = np.zeros((n_settings, 25))
+    metric_medians = np.zeros(n_settings)
+    metric_narrow = np.zeros((n_settings, 2))
+    metric_wide = np.zeros((n_settings, 2))
+    if print_accuracy:
+        accuracies = []
+    
+    for n in range(n_settings):
+        setting_metrics = []
+
+        for i in range(n_repetitions):
+            if metric=='ECE':
+                # List+append approach as not always all 15 bins are existing -> cant write results into multidim. array
+                prob_true, prob_pred, ece = calibration_curve_with_ece(m_true[n,i,:,1], m_pred[n,i,:,1], n_bins=n_bins)
+                setting_metrics.append(ece)
+
+            if metric=='Accuracy':
+                accuracy = accuracy_score(m_true[n,i,:,1], (m_pred[n,i,:,1]> 0.5).astype(np.int32))
+                setting_metrics.append(accuracy)
+
+            if metric=='SBC': # Assumes 50/50 model prior!
+                sbc = np.mean(0.5 - np.mean(m_pred[n,i,:,1]))
+                setting_metrics.append(sbc)
+
+            if print_accuracy:
+                accuracy = accuracy_score(m_true[n,i,:,1], (m_pred[n,i,:,1]> 0.5).astype(np.int32))
+                accuracies.append(accuracy)
+        all_metrics[n,:] = setting_metrics
+        metric_medians[n] = np.squeeze(np.quantile(setting_metrics, q=[0.5], axis=0))
+        metric_narrow[n] = np.quantile(setting_metrics, q=narrow_ci, axis=0)
+        metric_wide[n] = np.quantile(setting_metrics, q=wide_ci, axis=0)
+
+    metric_grand_median = np.squeeze(np.quantile(all_metrics.flatten(), q=[0.5], axis=0)) # important: flatten nested list
+    print(f'Grand median {metric} = {metric_grand_median}')
+
+    if print_accuracy:
+        acc_median = np.squeeze(np.quantile(accuracies, q=[0.5], axis=0))
+        print(f'Median accuracy = {acc_median}')
+
+    # Plot
+    #plt.axhline(y=ece_grand_median, linestyle='--', color='darkgrey')
+    ax.plot(n_obs_points, metric_medians, color=plotting_settings['colors_discrete'][0], label='Median')
+    ax.fill_between(n_obs_points, metric_narrow[:,0], metric_narrow[:,1], color=plotting_settings['colors_discrete'][0], 
+                alpha=0.3, label='{:.0%} CI'.format(narrow_ci[1]-narrow_ci[0]))
+    ax.fill_between(n_obs_points, metric_wide[:,0], metric_wide[:,1], color=plotting_settings['colors_discrete'][0], 
+                    alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0]))
+
+
+    # Plot settings
+    ax.set_xlim([n_obs_min, n_obs_max])
+    ax.set_xlabel('Number of observations ($N_m$)', fontsize=plotting_settings['fontsize_labels'])
+    if metric=='ECE':
+        ax.set_ylim([0, 0.1])
+        ax.set_ylabel(r'$\widehat{{\mathrm{{ECE}}}}$', fontsize=plotting_settings['fontsize_labels'])       
+    if metric=='Accuracy':
+        ax.set_ylabel(metric, fontsize=plotting_settings['fontsize_labels'])
+    if metric=='SBC':
+        ax.set_ylim([-0.1, 0.1])
+        ax.set_ylabel(metric, fontsize=plotting_settings['fontsize_labels'])
+    ax.grid(alpha=.3)
+    if show_legend:
+        ax.legend(fontsize=12)
+    sns.despine(ax=ax)
+    if save == True:
+        f.savefig(f'{metric}_variable_observations.pdf', dpi=300, bbox_inches='tight')
+
+
 # Calibration: Plotting for training with variable numbers of clusters and variable number of observations
 
 def plot_eces_variable(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max, save=False, zlims=[0, 0.1], zlabel=r'$\widehat{{\mathrm{{ECE}}}}$'):
