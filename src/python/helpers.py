@@ -5,6 +5,7 @@ import tensorflow as tf
 from scipy.stats import truncnorm
 from tensorflow.keras.utils import to_categorical
 from time import perf_counter
+from tqdm.notebook import tqdm
 
 from sklearn.utils import column_or_1d, assert_all_finite, check_consistent_length
 from sklearn.metrics import accuracy_score
@@ -241,7 +242,7 @@ def get_bootstrapped_predictions(probability_net, summary_net, simulated_data, s
 
 # Calibration: Plotting for training with variable numbers of clusters and variable number of observations
 def compute_eces_variable(probability_net, summary_net, simulator, n_val_per_setting, n_clust_min, n_clust_max, 
-                          n_obs_min, n_obs_max, n_cal_bins=15, add_accuracy=False):
+                          n_obs_min, n_obs_max, n_cal_bins=15, add_accuracy_sbc=False):
     """
     Simulates validation data per setting and computes the expected calibration error of the model.
     --------
@@ -263,8 +264,9 @@ def compute_eces_variable(probability_net, summary_net, simulator, n_val_per_set
     
     # Create lists
     eces = []
-    if add_accuracy:
+    if add_accuracy_sbc:
         accuracies = []
+        sbcs = []
     
     with tqdm(total=(n_clust_max+1 - n_clust_min), desc='Loop through clusters progress') as p_bar: 
         with tqdm(total=(n_obs_max+1 - n_obs_min), desc='Loop through nested observations progress') as p_bar_within:
@@ -285,9 +287,12 @@ def compute_eces_variable(probability_net, summary_net, simulator, n_val_per_set
                     prob_true, prob_pred, ece = calibration_curve_with_ece(m_true, m_soft, n_bins=n_cal_bins)
                     eces.append(ece)
 
-                    if add_accuracy:
+                    if add_accuracy_sbc:
                         accuracy = accuracy_score(m_true, m_hard)
                         accuracies.append(accuracy)
+
+                        sbc = np.mean(0.5 - np.mean(m_soft))
+                        sbcs.append(sbc)
 
                     # Update inner progress bar
                     p_bar_within.set_postfix_str("Cluster {0}, Observation {1}".format(l, n + 1))
@@ -298,8 +303,8 @@ def compute_eces_variable(probability_net, summary_net, simulator, n_val_per_set
                 p_bar.set_postfix_str("Finished clusters: {}".format(l))
                 p_bar.update()
     
-    if add_accuracy:
-        return eces, accuracies
+    if add_accuracy_sbc:
+        return eces, accuracies, sbcs
 
     return eces
 

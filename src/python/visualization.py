@@ -323,68 +323,6 @@ def perf_tester_over_obs(probability_net, summary_net, val_data, n_obs_min, n_ob
     plot_eces_over_obs(m_true, m_soft, n_obs_min, n_obs_max, n_cal_bins, pub_style, save)
 
 
-def plot_eces_over_obs_repeated(m_true, m_pred, n_obs_min, n_obs_max, narrow_ci, wide_ci, n_repetitions, 
-                                print_accuracy=False, n_bins=15, show_legend=True, save=False):
-    """Helper function to plot eces as a function of N."""
-
-    f, ax = plt.subplots(1, 1, figsize=(5, 5))
-    
-    n_settings = n_obs_max + 1 - n_obs_min
-    n_obs_points = np.arange(n_obs_min, n_obs_max+1)
-
-    # Get ECEs, median and intervals for each setting and repetition
-    all_eces = np.zeros((n_settings, 25))
-    ece_medians = np.zeros(n_settings)
-    ece_narrow = np.zeros((n_settings, 2))
-    ece_wide = np.zeros((n_settings, 2))
-    if print_accuracy:
-        accuracies = []
-    
-    for n in range(n_settings):
-        setting_eces = []
-
-        for i in range(n_repetitions):
-            # List+append approach as not always all 15 bins are existing -> cant write results into multidim. array
-            prob_true, prob_pred, ece = calibration_curve_with_ece(m_true[n,i,:,1], m_pred[n,i,:,1], n_bins=n_bins)
-            setting_eces.append(ece)
-
-            if print_accuracy:
-                accuracy = accuracy_score(m_true[n,i,:,1], (m_pred[n,i,:,1]> 0.5).astype(np.int32))
-                accuracies.append(accuracy)
-        all_eces[n,:] = setting_eces
-        ece_medians[n] = np.squeeze(np.quantile(setting_eces, q=[0.5], axis=0))
-        ece_narrow[n] = np.quantile(setting_eces, q=narrow_ci, axis=0)
-        ece_wide[n] = np.quantile(setting_eces, q=wide_ci, axis=0)
-
-    ece_grand_median = np.squeeze(np.quantile(all_eces.flatten(), q=[0.5], axis=0)) # important: flatten nested list
-    print(f'Grand median ECE = {ece_grand_median}')
-
-    if print_accuracy:
-        acc_median = np.squeeze(np.quantile(accuracies, q=[0.5], axis=0))
-        print(f'Median accuracy = {acc_median}')
-
-    # Plot
-    #plt.axhline(y=ece_grand_median, linestyle='--', color='darkgrey')
-    ax.plot(n_obs_points, ece_medians, color=plotting_settings['colors_discrete'][0], label='Median')
-    ax.fill_between(n_obs_points, ece_narrow[:,0], ece_narrow[:,1], color=plotting_settings['colors_discrete'][0], 
-                alpha=0.3, label='{:.0%} CI'.format(narrow_ci[1]-narrow_ci[0]))
-    ax.fill_between(n_obs_points, ece_wide[:,0], ece_wide[:,1], color=plotting_settings['colors_discrete'][0], 
-                    alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0]))
-
-
-    # Plot settings
-    ax.set_ylim([0, 0.1])
-    ax.set_xlim([n_obs_min, n_obs_max])
-    ax.set_xlabel('Number of observations ($N_m$)', fontsize=plotting_settings['fontsize_labels'])
-    ax.set_ylabel(r'$\widehat{{\mathrm{{ECE}}}}$', fontsize=plotting_settings['fontsize_labels'])
-    ax.grid(alpha=.3)
-    if show_legend:
-        ax.legend(fontsize=12)
-    sns.despine(ax=ax)
-    if save == True:
-        f.savefig('calibration_variable_observations.pdf', dpi=300, bbox_inches='tight')
-
-
 def plot_metric_over_obs_repeated(m_true, m_pred, n_obs_min, n_obs_max, narrow_ci, wide_ci, n_repetitions, 
                                   metric='ECE', print_accuracy=False, n_bins=15, show_legend=True, save=False):
     """Helper function to plot metrics as a function of N."""
@@ -438,7 +376,7 @@ def plot_metric_over_obs_repeated(m_true, m_pred, n_obs_min, n_obs_max, narrow_c
     #plt.axhline(y=ece_grand_median, linestyle='--', color='darkgrey')
     ax.plot(n_obs_points, metric_medians, color=plotting_settings['colors_discrete'][0], label='Median')
     ax.fill_between(n_obs_points, metric_narrow[:,0], metric_narrow[:,1], color=plotting_settings['colors_discrete'][0], 
-                alpha=0.3, label='{:.0%} CI'.format(narrow_ci[1]-narrow_ci[0]))
+                    alpha=0.3, label='{:.0%} CI'.format(narrow_ci[1]-narrow_ci[0]))
     ax.fill_between(n_obs_points, metric_wide[:,0], metric_wide[:,1], color=plotting_settings['colors_discrete'][0], 
                     alpha=0.2, label='{:.0%} CI'.format(wide_ci[1]-wide_ci[0]))
 
@@ -493,10 +431,13 @@ def plot_eces_variable(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max, sav
     print(f'Median ECE = {np.squeeze(np.quantile(eces, q=[0.5], axis=0))}')
 
     if save == True:
-        f.savefig('calibration_variable_sizes.pdf', dpi=300, bbox_inches='tight')
+        if zlabel==r'$\widehat{{\mathrm{{ECE}}}}$':
+            f.savefig(f'ECE_variable_sizes.pdf', dpi=300, bbox_inches='tight')
+        else:
+            f.savefig(f'{zlabel}_variable_sizes.pdf', dpi=300, bbox_inches='tight')
     
 
-def plot_eces_marginalized(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max, x_axis):
+def plot_metric_marginalized(results, n_clust_min, n_clust_max, n_obs_min, n_obs_max, x_axis, narrow_ci, wide_ci, metric='ECE', legend=True, save=False, ax=None):
     """Helper function to plot eces over clusters (1 = inspect observations) or observations (0 = inspect clusters)."""
 
     if x_axis == 0:
@@ -510,22 +451,38 @@ def plot_eces_marginalized(eces, n_clust_min, n_clust_max, n_obs_min, n_obs_max,
         n_min, n_max = n_obs_min, n_obs_max
 
     # Average marginalized dimension
-    eces_reshaped = np.reshape(eces, (-1, n_clust_max)) # reshape into (#clusters, #observations)
-    eces_marginalized = np.mean(eces_reshaped, axis = axis)
-    print(eces_marginalized[:5]) # inspect ECEs for small number of clusters/observations
+    metrics_reshaped = np.reshape(results, (-1, n_clust_max)) # reshape into (#clusters, #observations)
+    metric_medians = np.median(metrics_reshaped, axis=axis)
+    metric_narrow = np.quantile(metrics_reshaped, q=narrow_ci, axis=axis)
+    metric_wide = np.quantile(metrics_reshaped, q=wide_ci, axis=axis)
+    print(metric_medians[:5]) # inspect metric for small number of clusters/observations
 
-    f, ax = plt.subplots(1, 1, figsize=(10, 10))
+    if not ax:
+        f, ax = plt.subplots(1, 1, figsize=plotting_settings['figsize'])
     
     n_points = np.arange(n_min, n_max+1)
     
-    ax.plot(n_points, eces_marginalized, color='black')
-    mean_ece = np.mean(eces_marginalized)
-    plt.axhline(y=mean_ece, linestyle='--', color='darkgrey')
+    ax.plot(n_points, metric_medians, color=plotting_settings['colors_discrete'][0], label='Median')
+    ax.fill_between(n_points, metric_narrow[0,:], metric_narrow[1,:], color=plotting_settings['colors_discrete'][0], 
+                    alpha=0.3, label='{:.0%} quantile interval'.format(narrow_ci[1]-narrow_ci[0]))
+    ax.fill_between(n_points, metric_wide[0,:], metric_wide[1,:], color=plotting_settings['colors_discrete'][0], 
+                    alpha=0.2, label='{:.0%} quantile interval'.format(wide_ci[1]-wide_ci[0]))
+
     ax.set_xlim([n_min, n_max])
-    ax.set_ylim([0, 0.4])
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(r'$\widehat{{\mathrm{{ECE}}}}$')
+    ax.set_xlabel(xlabel, fontsize=plotting_settings['fontsize_labels'])
+    if metric=='ECE':
+        #ax.set_ylim([0, 0.1])
+        ax.set_ylabel(r'$\widehat{{\mathrm{{ECE}}}}$', fontsize=plotting_settings['fontsize_labels'])       
+    if metric=='Accuracy':
+        ax.set_ylabel(metric, fontsize=plotting_settings['fontsize_labels'])
+    if metric=='SBC':
+        ax.set_ylim([-0.1, 0.1])
+        ax.set_ylabel(metric, fontsize=plotting_settings['fontsize_labels'])
     ax.grid(alpha=.3)
+    if legend:
+        ax.legend(fontsize=12)
+    if save == True:
+        f.savefig(f'{metric}_variable_observations.pdf', dpi=300, bbox_inches='tight')
 
 
 # Bridge sampling comparison: Plot approximations
