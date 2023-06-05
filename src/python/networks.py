@@ -1,8 +1,6 @@
 import numpy as np
 np.set_printoptions(suppress=True)
 import tensorflow as tf
-from tensorflow.keras.layers import Dropout
-
 
 
 class InvariantModule(tf.keras.Model):
@@ -191,6 +189,9 @@ class ModelProbabilityNetwork(tf.keras.Model):
         # Output layer
         self.softmax_layer = tf.keras.layers.Dense(meta['n_models'], activation='softmax')
 
+        # Output layer without activation for obtaining logits
+        self.logit_layer = tf.keras.layers.Dense(meta['n_models'])
+
         self.J = meta['n_models']
 
     def call(self, x):
@@ -226,3 +227,22 @@ class ModelProbabilityNetwork(tf.keras.Model):
             probs = probs.numpy()
 
         return {'m_probs': probs}
+    
+    def get_logits(self, obs_data):
+        """ Shortcut function to obtain logits.
+
+        Parameters
+        ----------
+        obs_data: tf.Tensor
+            Observed data or respective embeddings created by a summary network
+
+        Returns
+        -------
+        logits: tf.Tensor of shape (batch_size, num_models)
+            The logits for each class
+        """
+
+        out = self.dense(obs_data)
+        logits = self.logit_layer(out)
+
+        return logits
